@@ -101,12 +101,11 @@ tr.prac td{opacity:.5}
   <div class="conn">
     <h3>Connection</h3>
     <p>Neither of these is stored in this file. They are kept in this browser tab only and are
-      forgotten when you close it. The admin key is the one you set as <span class="mono"
-      style="font-family:var(--f-mono)">ADMIN_KEY</span> in <span
-      style="font-family:var(--f-mono)">Code.gs</span>.</p>
+      forgotten when you close it. The admin key is the <span class="mono"
+      style="font-family:var(--f-mono)">ADMIN_KEY</span> secret set on the Worker.</p>
     <div class="row">
-      <div class="fld"><label for="ep">Apps Script /exec URL</label>
-        <input id="ep" placeholder="https://script.google.com/macros/s/AKfy.../exec"></div>
+      <div class="fld"><label for="ep">Backend address</label>
+        <input id="ep" placeholder="https://ims-cat26.your-subdomain.workers.dev"></div>
       <div class="fld"><label for="key">Admin key</label>
         <input id="key" type="password" placeholder="ADMIN_KEY"></div>
       <div class="fld"><button class="btn" id="load" style="width:100%">Load report</button></div>
@@ -115,6 +114,11 @@ tr.prac td{opacity:.5}
   </div>
 
   <div id="panel">
+    <!-- Faculty control. A paper only accepts its passcode while it is open, so a passcode
+         that leaks into a WhatsApp group is dead by the evening. -->
+    <h2 class="sec">Sessions <small>open a paper when the students are in front of you</small></h2>
+    <div class="tiles" id="sessions"></div>
+
     <div class="bar">
       <div class="fld" style="min-width:230px"><label for="paper">Paper</label>
         <select id="paper"></select></div>
@@ -159,6 +163,54 @@ const dt = v => { const d=new Date(v); return isNaN(d)?'—' :
   d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+
   d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}); };
 
+/* ---------------- sessions: open and close papers ---------------- */
+const OPEN_MINS = 150;   // long enough for a 40-minute paper plus stragglers and reads
+
+async function loadSessions(){
+  const box = $('#sessions');
+  try{
+    const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=papers&key=' +
+      encodeURIComponent(SS.key);
+    const j = await (await fetch(u)).json();
+    if(!j.ok || !j.defined){ box.innerHTML = ''; return; }
+    box.innerHTML = '';
+    j.defined.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'tile';
+      const until = p.open_until ? new Date(p.open_until) : null;
+      const openNow = !!p.openNow;
+      el.innerHTML =
+        '<div class="k">' + p.name + (p.ready ? '' : ' <em>(not built)</em>') + '</div>' +
+        '<div class="v" style="font-size:19px;color:' + (openNow ? '#1B5E3F' : '#8A5A00') + '">' +
+          (openNow ? 'Open' : 'Closed') + '</div>' +
+        '<div class="s">' + (openNow && until
+            ? 'closes ' + until.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})
+            : 'students cannot start it') + '</div>' +
+        (p.ready ? '<button class="btn-g btn" style="margin-top:10px;width:100%" ' +
+          'data-paper="' + p.id + '" data-open="' + (openNow ? '0' : OPEN_MINS) + '">' +
+          (openNow ? 'Close now' : 'Open for ' + OPEN_MINS + ' min') + '</button>' : '');
+      box.appendChild(el);
+    });
+  }catch(e){ box.innerHTML = ''; }
+}
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('#sessions button[data-paper]');
+  if(!b) return;
+  b.disabled = true; b.textContent = 'Working…';
+  try{
+    const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=paper_open&key=' +
+      encodeURIComponent(SS.key);
+    const r = await fetch(u, { method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ paper: b.getAttribute('data-paper'),
+                             minutes: Number(b.getAttribute('data-open')) }) });
+    const j = await r.json();
+    if(!j.ok) msg('Could not change that paper: '+(j.reason||'unknown'),'err');
+  }catch(err){ msg('Could not reach the server to change that paper.','err'); }
+  loadSessions();
+});
+
 async function load(paper){
   const ep = $('#ep').value.trim(), key = $('#key').value.trim();
   if(!ep || !key){ msg('Enter both the /exec URL and the admin key.','err'); return; }
@@ -175,7 +227,7 @@ async function load(paper){
         : 'The server refused: '+(j.reason||'unknown'),'err');
       $('#load').disabled=false; return;
     }
-    DATA = j; hide(); render();
+    DATA = j; hide(); render(); loadSessions();
   }catch(e){
     msg('Could not reach that URL. Check it ends in /exec, that the deployment is set to '+
         '"Anyone" access, and that you are online. ('+e.message+')','err');
