@@ -74,6 +74,7 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .warnbox.on{display:block}
 .warnbox.info{border-color:var(--navy);background:#EEF2F9;color:#1F3864}
 .wel-eyebrow{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--ok)}
+.rs-eyebrow{color:var(--navy)}
 .wel-name{font-family:var(--f-disp);font-size:34px;font-weight:600;letter-spacing:-.02em;
   margin:8px 0 0;line-height:1.05}
 .wel-meta{font-family:var(--f-mono);font-size:12.5px;color:var(--ink-3);margin:9px 0 0;line-height:1.6}
@@ -210,6 +211,8 @@ section.blk:last-of-type{border-bottom:0}
   font-size:10px;color:rgba(255,255,255,.92);pointer-events:none;white-space:nowrap}
 .rseg.unused{background:repeating-linear-gradient(45deg,#F2EEE6 0 6px,#E7E1D4 6px 12px)}
 .rseg.unused span{color:var(--ink-3)}
+.rseg.gapseg{background:repeating-linear-gradient(45deg,#DCD5C6 0 5px,#C7BEAA 5px 10px)}
+.rseg.gapseg span{color:#4A4438}
 .ribaxis{display:flex;justify-content:space-between;margin-top:7px;font-family:var(--f-mono);
   font-size:10.5px;color:var(--ink-3)}
 .ribkey{display:flex;flex-wrap:wrap;gap:7px 18px;margin-top:14px;padding-top:13px;border-top:1px solid var(--rule-2)}
@@ -300,6 +303,14 @@ section.blk:last-of-type{border-bottom:0}
       </div>
     </div>
     <div class="gateright">
+      <div id="rsbox" hidden>
+        <div class="wel-eyebrow rs-eyebrow">Unfinished attempt</div>
+        <h3 class="wel-name">Pick up where you stopped.</h3>
+        <p class="wel-meta" id="rsmeta"></p>
+        <p class="hint" id="rsline"></p>
+        <button class="btn" id="rsgo">Resume the paper &rarr;</button>
+        <button class="btn-link" id="rsdrop">Discard it and start the paper again</button>
+      </div>
       <div id="gateform">
         <label for="pin">IMS PIN</label>
         <input id="pin" autocomplete="off" spellcheck="false" placeholder="e.g. AHM26QA001">
@@ -344,6 +355,10 @@ section.blk:last-of-type{border-bottom:0}
       <div class="rulerow"><dt>Navigation</dt><dd><b>Save &amp; Next</b> records your answer and moves on.
         <b>Mark for Review</b> flags a question you intend to return to; a marked question is still
         graded if it carries an answer. <b>Clear Response</b> empties it.</dd></div>
+      <div class="rulerow"><dt>If it crashes</dt><dd>Your answers are saved on this computer every
+        few seconds. If the browser or the machine dies, open this page again <b>on the same
+        computer</b> and it will offer to put you back exactly where you were. The clock keeps
+        running while you are away, as it would in the hall &mdash; so come straight back.</dd></div>
       <div class="rulerow"><dt>Keyboard</dt><dd><span class="mono">1&ndash;4</span> select an option,
         <span class="mono">Enter</span> save and next, <span class="mono">&larr; &rarr;</span> move between
         questions, <span class="mono">M</span> mark for review.</dd></div>
@@ -488,7 +503,9 @@ const CONFIG = {
   BLEED_AFTER: 45,       // seconds on a blank question before it counts as bleed
   SUNK_AFTER: 120,       // seconds on a wrong question before it counts as sunk
   SEND_JITTER: 20,       // seconds of random spread on auto-submit, to flatten the burst
-  SEND_TRIES: 4          // send attempts before the payload is parked for a later retry
+  SEND_TRIES: 4,         // send attempts before the payload is parked for a later retry
+  SAVE_EVERY: 4,         // seconds between crash-recovery snapshots
+  RESUME_MAX: 24 * 3600  // an unfinished attempt older than this is dropped, never offered
 };
 
 const QS = [
@@ -864,7 +881,9 @@ const S = {
   marked: Array(N).fill(false),
   seen: Array(N).fill(false),
   ev: [],                        // {t, type, q, v}
-  enterT: 0
+  enterT: 0,
+  gap: 0,                        // seconds lost to interruptions, charged to no question
+  resumes: 0
 };
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
@@ -882,6 +901,123 @@ function show(id) { document.querySelectorAll('.screen').forEach(e => e.classLis
 /* ---------------- gate ---------------- */
 const LSKEY = 'ims.cat26.' + CONFIG.PAPER_ID;
 const api = q => CONFIG.ENDPOINT + (CONFIG.ENDPOINT.includes('?') ? '&' : '?') + q;
+
+/* ---------------- crash recovery ----------------
+   The attempt in progress is written to localStorage every few seconds and on every answer,
+   so a dead tab, a shut laptop or a stray reload does not cost the student the paper.
+   Three rules hold it together:
+     - the clock is wall-clock. The snapshot carries the real start time, so the seconds
+       spent getting back are gone. Killing the tab cannot stop the timer.
+     - time inside an interruption belongs to no question. On resume the question that was
+       open is closed at the last snapshot and the break is logged as its own 'gap' event,
+       so the report shows it as an interruption band instead of quietly inflating one
+       question's time and poisoning the triage analysis.
+     - a snapshot is offered back only if it belongs to this paper AND to this exact
+       question set, because a rebuilt page can reorder the questions and the answers
+       would then land on the wrong ones. */
+const PKEY = 'ims_cat26_progress_' + CONFIG.PAPER_ID;
+let _sig = null;
+const paperSig = () => _sig || (_sig = hex(sha256sync(QS.map(q => q.id).join(','))).slice(0, 12));
+
+let saveTimer = null;
+function saveProgress() {
+  if (S.ended || !S.t0) return;
+  try {
+    localStorage.setItem(PKEY, JSON.stringify({
+      v: 2, paper: CONFIG.PAPER_ID, sig: paperSig(),
+      pin: S.pin, name: S.name, batch: S.batch, centre: S.centre,
+      practice: !!S.practice, offline: !!S.offline, prior: S.prior || null,
+      startedAt: S.startedAt, t0: S.t0, savedAt: now(), savedClk: clk(),
+      cur: S.cur, ans: S.ans, marked: S.marked, seen: S.seen, ev: S.ev,
+      gap: S.gap, resumes: S.resumes
+    }));
+  } catch (e) { /* private window, or the quota is full — the paper carries on regardless */ }
+}
+function clearProgress() { try { localStorage.removeItem(PKEY); } catch (e) {} }
+function readProgress() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { return null; }
+  if (!p || p.v !== 2 || p.paper !== CONFIG.PAPER_ID || p.sig !== paperSig()) return null;
+  if (!p.startedAt || !p.t0 || !Array.isArray(p.ans) || p.ans.length !== N) return null;
+  if (!(now() - p.savedAt < CONFIG.RESUME_MAX * 1000)) return null;
+  return p;
+}
+
+/* Shown on load when an unfinished attempt for this paper is sitting in this browser. */
+function offerResume() {
+  const p = readProgress();
+  if (!p) return;
+  const left = Math.max(0, CONFIG.DURATION - (now() - p.t0) / 1000);
+  const done = p.ans.filter(a => a !== null && a !== '').length;
+  const d = new Date(p.startedAt);
+  const who = (p.name || '').trim().split(/\s+/)[0];
+  $('#rsmeta').textContent = [
+    (who ? who + ' · ' : '') + p.pin,
+    'started ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    done + ' of ' + N + ' answered'
+  ].join('   ·   ');
+  $('#rsline').innerHTML = left > 0
+    ? 'Your answers and your place in the paper were saved on this computer. <b>' + mmss(left) +
+      '</b> is still on the clock — it has been running the whole time you were away, exactly ' +
+      'as it would in the hall.'
+    : '<b>The clock ran out while this paper was closed.</b> Continuing will submit it as it ' +
+      'stood and show you the full report.';
+  $('#rsgo').textContent = left > 0 ? 'Resume the paper →' : 'Submit it and see the report →';
+  $('#rsbox').hidden = false;
+  $('#gateform').hidden = true;
+
+  $('#rsdrop').onclick = () => {
+    if (!confirm('Discard the unfinished attempt?\n\nThe ' + done + ' answer(s) saved on this ' +
+      'computer will be deleted and the paper will start again from the beginning.')) return;
+    clearProgress();
+    $('#rsbox').hidden = true; $('#gateform').hidden = false; $('#pin').focus();
+  };
+  $('#rsgo').onclick = async () => {
+    const b = $('#rsgo');
+    b.disabled = true;
+    /* The snapshot is only as trustworthy as the browser it sat in, so the PIN goes back
+       through the same enrolment gate it passed the first time. */
+    if (PINS && PINS.length) {
+      b.innerHTML = '<span class="spin"></span> Checking&hellip;';
+      await new Promise(r => setTimeout(r, 0));
+      if (PINS.indexOf(pinHash(String(p.pin || '').toUpperCase())) < 0) {
+        clearProgress();
+        $('#rsbox').hidden = true; $('#gateform').hidden = false;
+        gateMsg('The saved attempt was for a PIN that is not on the enrolled list for this ' +
+          'paper, so it has been discarded. Enter your PIN to begin.');
+        return;
+      }
+    }
+    resumeAttempt(p);
+  };
+}
+
+function resumeAttempt(p) {
+  S.pin = p.pin; S.name = p.name || ''; S.batch = p.batch || ''; S.centre = p.centre || '';
+  S.practice = !!p.practice; S.offline = !!p.offline; S.prior = p.prior || null;
+  S.pending = false;
+  S.startedAt = p.startedAt; S.t0 = p.t0; S.ended = false; S.autoSub = false;
+  S.ans = p.ans.slice();
+  S.marked = Array.isArray(p.marked) && p.marked.length === N ? p.marked.slice() : Array(N).fill(false);
+  S.seen = Array.isArray(p.seen) && p.seen.length === N ? p.seen.slice() : Array(N).fill(false);
+  S.ev = Array.isArray(p.ev) ? p.ev.slice() : [];
+  S.resumes = (p.resumes || 0) + 1;
+
+  /* Close whichever question was open when the last snapshot was taken, then record the
+     break itself. The question is charged only up to the snapshot; the break stands alone. */
+  let open = null;
+  for (const e of S.ev) { if (e.type === 'enter') open = e; else if (e.type === 'leave') open = null; }
+  if (open) S.ev.push({ t: Math.max(open.t, p.savedClk), type: 'leave', q: open.q });
+  /* Clamped to the end of the paper: a break that outlasts the clock is only ever a
+     break for the minutes the paper still had. Without this the band overruns the
+     ribbon and the report claims more interruption than the paper was long. */
+  const away = Math.max(0, Math.min(clk(), CONFIG.DURATION) - p.savedClk);
+  if (away > 0) S.ev.push({ t: p.savedClk, type: 'gap', q: -1, v: away });
+  S.gap = (p.gap || 0) + away;
+
+  paintWelcome();
+  runTest(Math.max(0, Math.min(N - 1, p.cur | 0)));
+}
 
 function gateMsg(html, info) {
   const w = $('#gatewarn');
@@ -1030,10 +1166,25 @@ $('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin();
 /* ---------------- start ---------------- */
 $('#begin').onclick = () => {
   S.startedAt = now(); S.t0 = now(); S.ended = false;
-  show('test'); buildPalette(); goTo(0, true); tick();
-  timerId = setInterval(tick, 250);
-  window.addEventListener('beforeunload', beforeUnload);
+  S.gap = 0; S.resumes = 0;
+  clearProgress();                  // a fresh sitting supersedes anything left on this machine
+  runTest(0);
 };
+
+/* The one way into the test screen — a fresh start and a resume both come through here. */
+function runTest(at) {
+  show('test'); buildPalette(); goTo(at, true); tick();
+  if (S.ended) return;              // resumed after the clock had already run out
+  if (timerId) clearInterval(timerId);
+  timerId = setInterval(tick, 250);
+  if (saveTimer) clearInterval(saveTimer);
+  saveTimer = setInterval(saveProgress, CONFIG.SAVE_EVERY * 1000);
+  window.addEventListener('beforeunload', beforeUnload);
+  window.addEventListener('pagehide', saveProgress);      // catches the tab being closed
+  document.addEventListener('visibilitychange', onHide);
+  saveProgress();
+}
+function onHide() { if (document.visibilityState === 'hidden') saveProgress(); }
 function beforeUnload(e) { if (!S.ended) { e.preventDefault(); e.returnValue = ''; } }
 
 /* ---------------- timer ---------------- */
@@ -1106,7 +1257,7 @@ function goTo(i, first) {
     inp.oninput = () => {
       inp.value = inp.value.replace(/[^0-9-]/g, '');
       S.ans[S.cur] = inp.value === '' ? null : inp.value;
-      log('type', S.cur, inp.value); paint();
+      log('type', S.cur, inp.value); paint(); saveProgress();
     };
     w.appendChild(inp);
     w.appendChild(el('p', 'titanote', 'Digits only. No units, no commas, no decimal point.'));
@@ -1114,11 +1265,13 @@ function goTo(i, first) {
     setTimeout(() => inp.focus(), 30);
   }
   paint();
+  saveProgress();
 }
 function pick(k) {
   S.ans[S.cur] = k; log('select', S.cur, k);
   document.querySelectorAll('.opt').forEach((b, j) => b.classList.toggle('sel', j + 1 === k));
   paint();
+  saveProgress();
 }
 $('#a-next').onclick = () => { if (S.cur < N - 1) goTo(S.cur + 1); else goTo(0); };
 $('#a-prev').onclick = () => goTo(S.cur > 0 ? S.cur - 1 : N - 1);
@@ -1127,6 +1280,7 @@ $('#a-mark').onclick = () => {
   S.marked[S.cur] = !S.marked[S.cur];
   log(S.marked[S.cur] ? 'mark' : 'unmark', S.cur);
   if (S.marked[S.cur] && S.cur < N - 1) goTo(S.cur + 1); else paint();
+  saveProgress();
 };
 $('#submitbtn').onclick = () => {
   const unans = S.ans.filter(a => a === null || a === '').length;
@@ -1225,9 +1379,10 @@ function timeline() {
   for (const e of S.ev) {
     if (e.type === 'enter') { open = { q: e.q, from: e.t }; }
     else if (e.type === 'leave' && open) { segs.push({ q: open.q, from: open.from, to: e.t }); open = null; }
+    else if (e.type === 'gap') { segs.push({ q: -1, from: e.t, to: e.t + e.v }); }   // interruption
   }
   if (open) segs.push({ q: open.q, from: open.from, to: S.endT });
-  return segs.filter(s => s.to > s.from);
+  return segs.filter(s => s.to > s.from).sort((a, b) => a.from - b.from);
 }
 
 /* ---------------- finish ---------------- */
@@ -1235,7 +1390,11 @@ async function finish() {
   if (S.ended) return;
   S.ended = true;
   clearInterval(timerId);
+  clearInterval(saveTimer);
+  clearProgress();                  // the attempt is finished; there is nothing to resume
   window.removeEventListener('beforeunload', beforeUnload);
+  window.removeEventListener('pagehide', saveProgress);
+  document.removeEventListener('visibilitychange', onHide);
   log('leave', S.cur);
   S.endT = clk();
   const g = await grade();
@@ -1260,7 +1419,8 @@ function analyse(g, segs) {
     key: unveil(q.a, CONFIG.SALT + '|A|' + q.id),
     firstAnsAt: null, changes: 0, hadRight: false
   }));
-  segs.forEach(s => { per[s.q].t += (s.to - s.from); per[s.q].visits++; });
+  segs.forEach(s => { if (s.q < 0) return;          // an interruption is charged to no question
+    per[s.q].t += (s.to - s.from); per[s.q].visits++; });
 
   // selection history → changes, first-answer time
   const sel = {};
@@ -1330,6 +1490,7 @@ function analyse(g, segs) {
   return { per, score, correct, wrongMCQ, wrongTITA, attempted, tProd, tNeg, tBleed, tScan,
     wasted, cheap, couldBuy, rho, hardEarly, flips, flipHurt,
     used: Math.min(S.endT, CONFIG.DURATION), auto: S.autoSub,
+    gap: Math.min(S.gap, CONFIG.DURATION), resumes: S.resumes,
     maxScore: N * 3, benchTotal: QS.reduce((a, q) => a + q.bench, 0) };
 }
 
@@ -1352,7 +1513,8 @@ function render(A) {
     d.toLocaleDateString('en-IN',
     { day: 'numeric', month: 'long', year: 'numeric' }) + '  ·  ' +
     d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) +
-    (A.auto ? '  ·  submitted by the clock' : '  ·  submitted early');
+    (A.auto ? '  ·  submitted by the clock' : '  ·  submitted early') +
+    (A.resumes ? '  ·  interrupted and resumed, ' + human(A.gap) + ' off the clock' : '');
 
   /* score row */
   const sr = $('#scorerow'); sr.innerHTML = '';
@@ -1375,7 +1537,23 @@ function render(A) {
   const bar = $('#ribbar'); bar.innerHTML = '';
   const total = CONFIG.DURATION;                    // the ribbon is always the full 40 minutes
   segs.forEach(s => {
-    const p = A.per[s.q], dur = s.to - s.from;
+    const dur = s.to - s.from;
+    if (s.q < 0) {                                   // the paper was closed and reopened here
+      const gp = el('div', 'rseg gapseg');
+      gp.style.flex = dur + ' 0 0';
+      if (dur / total > .06) gp.appendChild(el('span', '', 'interrupted · ' + human(dur)));
+      gp.onmousemove = ev => { const t = $('#ribtip');
+        t.innerHTML = '<b>Interrupted</b><br><span class="t">' + human(dur) + '</span><br>' +
+          'The paper was closed and reopened. The clock kept running, but this time is ' +
+          'charged to no question.';
+        t.style.display = 'block';
+        t.style.left = Math.min(ev.clientX + 14, innerWidth - 268) + 'px';
+        t.style.top = (ev.clientY + 16) + 'px'; };
+      gp.onmouseleave = () => $('#ribtip').style.display = 'none';
+      bar.appendChild(gp);
+      return;
+    }
+    const p = A.per[s.q];
     const seg = el('div', 'rseg');
     seg.style.flex = dur + ' 0 0'; seg.style.background = CL[p.cls].c;
     if (dur / total > .035) seg.appendChild(el('span', '', String(p.n)));
@@ -1611,7 +1789,7 @@ function payload(A) {
     startedAt: new Date(S.startedAt).toISOString(),
     practice: !!S.practice, auto: A.auto, used: A.used,
     score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
-    wasted: A.wasted, rho: A.rho,
+    wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
     q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
       a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls })),
     ua: navigator.userAgent.slice(0, 120), v: 1
@@ -1743,6 +1921,9 @@ function applyPeer(j, A) {
 
 /* Anything stranded by a dead connection on a previous sitting goes out now, quietly. */
 flushParked();
+
+/* An attempt left unfinished on this machine — a crash, a reboot, a closed tab. */
+offerResume();
 
 $('#dl').onclick = () => {
   const blob = new Blob([JSON.stringify(lastPayload || {}, null, 1)], { type: 'application/json' });
