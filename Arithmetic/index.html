@@ -281,6 +281,46 @@ section.blk:last-of-type{border-bottom:0}
   .qactions .inner{padding-right:24px}
   .blkhead p{text-align:left}
 }
+/* ============ ON-SCREEN CALCULATOR ============
+   A deliberate clone of the exam's Windows-Standard calculator, awkwardness included:
+   mouse only, no keyboard, no bracket, no history, "/" and "*" rather than the proper
+   signs. A friendlier calculator would teach a habit that costs marks on the day. */
+#calc{position:fixed;z-index:60;width:290px;display:none;
+  box-shadow:0 18px 48px rgba(20,26,40,.34);border-radius:4px;overflow:hidden;
+  font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif;
+  user-select:none;-webkit-user-select:none}
+#calc.on{display:block}
+#calc .ctitle{background:#4a7ebb;color:#fff;padding:9px 10px 9px 14px;
+  display:flex;align-items:center;justify-content:space-between;cursor:move;touch-action:none}
+#calc .ctitle span{font-size:19px;font-weight:600;letter-spacing:.2px}
+#calc .cx{width:30px;height:26px;border:1px solid #b9600f;border-radius:3px;background:#ec7a1c;
+  color:#fff;font-size:15px;font-weight:700;line-height:1;cursor:pointer;padding:0}
+#calc .cx:hover{background:#d96c12}
+#calc .cbody{background:#e6e6e6;padding:11px;display:flex;flex-direction:column;gap:9px}
+#calc .cexpr,#calc .cdisp{background:#fff;border:2px solid #c9c9c9;border-radius:2px;
+  padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;overflow:hidden;
+  white-space:nowrap;direction:ltr}
+#calc .cexpr{min-height:34px;font-size:14px;color:#555;line-height:18px}
+#calc .cdisp{min-height:44px;font-size:29px;font-weight:600;color:#111;line-height:28px}
+#calc .cmem{float:left;font-size:12px;font-weight:700;color:#4a7ebb;letter-spacing:.5px}
+#calc .cpad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+#calc .cpad button{border:1px solid #adadad;border-radius:3px;background:#f5f5f5;color:#1a1a1a;
+  font-size:16px;font-weight:600;padding:11px 0;cursor:pointer;min-height:42px;
+  font-family:inherit;transition:background .06s}
+#calc .cpad button:hover{background:#e2e2e2}
+#calc .cpad button:active{background:#cfcfcf;transform:translateY(1px)}
+#calc .cpad button:focus-visible{outline:2px solid #4a7ebb;outline-offset:1px}
+#calc .cpad .k-red{background:#c9483a;border-color:#a5382c;color:#fff}
+#calc .cpad .k-red:hover{background:#b03e31}
+#calc .cpad .k-red:active{background:#96352a}
+#calc .cpad .k-eq{background:#5cb85c;border-color:#4a9d4a;color:#fff;font-size:20px}
+#calc .cpad .k-eq:hover{background:#4fa54f}
+#calc .cpad .w2{grid-column:span 2}
+#calc .cpad .h2{grid-row:span 2}
+#calc.err .cdisp{color:#c00000;font-size:19px}
+#calcbtn.live{background:var(--navy);color:#fff;border-color:var(--navy)}
+@media (max-width:520px){ #calc{width:calc(100vw - 24px);max-width:290px} }
+
 </style>
 </head>
 <body>
@@ -423,12 +463,48 @@ section.blk:last-of-type{border-bottom:0}
     </aside>
   </div></div>
   <div class="qactions"><div class="inner">
+    <button class="btn btn-ghost" id="calcbtn">Calculator</button>
     <button class="btn btn-ghost" id="a-clear">Clear response</button>
     <button class="btn btn-ghost" id="a-mark">Mark for review &amp; next</button>
     <span class="sp"></span>
     <button class="btn btn-ghost" id="a-prev">&larr; Previous</button>
     <button class="btn" id="a-next">Save &amp; next &rarr;</button>
   </div></div>
+
+  <!-- Exam-clone calculator. Mouse only, by design. -->
+  <div id="calc" role="dialog" aria-label="Calculator">
+    <div class="ctitle" id="calcdrag">
+      <span>Calculator</span>
+      <button class="cx" id="calcclose" aria-label="Close calculator">&#10006;</button>
+    </div>
+    <div class="cbody">
+      <div class="cexpr"><span class="cmem" id="calcmem"></span><span id="calcexpr"></span></div>
+      <div class="cdisp" id="calcdisp">0</div>
+      <div class="cpad" id="calcpad">
+        <button data-k="MC">MC</button><button data-k="MR">MR</button><button data-k="MS">MS</button>
+        <button data-k="M+">M+</button><button data-k="M-">M-</button>
+
+        <button data-k="back" class="k-red w2">&larr;</button>
+        <button data-k="C" class="k-red">C</button>
+        <button data-k="neg" class="k-red">+/-</button>
+        <button data-k="sqrt">&radic;</button>
+
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="/">/</button><button data-k="pct">%</button>
+
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+        <button data-k="*">*</button><button data-k="inv">1/x</button>
+
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+        <button data-k="-">-</button>
+        <button data-k="=" class="k-eq h2">=</button>
+
+        <button data-k="0" class="w2">0</button>
+        <button data-k=".">.</button>
+        <button data-k="+">+</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ============ RESULTS ============ -->
@@ -1289,6 +1365,10 @@ $('#submitbtn').onclick = () => {
 };
 document.addEventListener('keydown', e => {
   if (!$('#test').classList.contains('on')) return;
+  /* Calculator open: the exam's is mouse-only, so the keyboard does nothing at all.
+     Without this, a student typing 5 into the calculator would silently answer the
+     question with option 5 — worse than nothing happening. */
+  if (CALC.open) { log('calckey', S.cur, e.key); return; }
   if (e.target.tagName === 'INPUT' && !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
   if (e.key >= '1' && e.key <= '4' && QS[S.cur].type === 'MCQ') { pick(+e.key); e.preventDefault(); }
   else if (e.key === 'Enter') { $('#a-next').click(); e.preventDefault(); }
@@ -1296,6 +1376,174 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft') { $('#a-prev').click(); e.preventDefault(); }
   else if (e.key.toLowerCase() === 'm') { $('#a-mark').click(); e.preventDefault(); }
 });
+
+/* ---------------- on-screen calculator ----------------
+   Windows-Standard semantics, cloned including the parts students dislike. Mouse only:
+   there is no key handler here, deliberately. Every press is logged against the question
+   that was open, so the report can say what a student reached for and what it cost. */
+const CALC = {
+  open: false, acc: null, pending: null, cur: '0', fresh: true,
+  mem: 0, hasMem: false, lastOp: null, lastArg: null, err: false,
+  x: null, y: null, opens: 0
+};
+const CALC_MAX = 16;
+
+function calcFmt(n) {
+  if (!isFinite(n)) return 'Cannot divide by zero';
+  if (n === 0) return '0';
+  const a = Math.abs(n);
+  if (a >= 1e16 || a < 1e-15) return n.toExponential(9).replace('e', 'e');
+  let s = String(parseFloat(n.toPrecision(15)));
+  return s;
+}
+function calcPaint() {
+  $('#calcdisp').textContent = CALC.err ? CALC.err : (CALC.cur === '' ? '0' : CALC.cur);
+  $('#calcexpr').textContent = CALC.err ? ''
+    : (CALC.acc !== null && CALC.pending ? calcFmt(CALC.acc) + ' ' + CALC.pending : '');
+  $('#calcmem').textContent = CALC.hasMem ? 'M' : '';
+  $('#calc').classList.toggle('err', !!CALC.err);
+}
+function calcApply(a, b, op) {
+  if (op === '+') return a + b;
+  if (op === '-') return a - b;
+  if (op === '*') return a * b;
+  if (op === '/') return b === 0 ? NaN : a / b;
+  return b;
+}
+function calcVal() { return parseFloat(CALC.cur) || 0; }
+function calcSet(n) {
+  if (!isFinite(n)) { CALC.err = 'Cannot divide by zero'; CALC.cur = '0'; return; }
+  CALC.cur = calcFmt(n);
+}
+function calcReset() {
+  CALC.acc = null; CALC.pending = null; CALC.cur = '0'; CALC.fresh = true;
+  CALC.lastOp = null; CALC.lastArg = null; CALC.err = false;
+}
+
+function calcPress(k) {
+  log('calc', S.cur, k);                     // telemetry: every press, against this question
+
+  /* Once the display is an error only C brings it back — same as the exam. */
+  if (CALC.err && k !== 'C') { calcPaint(); return; }
+
+  if (k >= '0' && k <= '9') {
+    if (CALC.fresh) { CALC.cur = k; CALC.fresh = false; }
+    else if (CALC.cur.replace(/[-.]/g, '').length < CALC_MAX) {
+      CALC.cur = CALC.cur === '0' ? k : CALC.cur + k;
+    }
+  } else if (k === '.') {
+    if (CALC.fresh) { CALC.cur = '0.'; CALC.fresh = false; }
+    else if (CALC.cur.indexOf('.') < 0) CALC.cur += '.';
+  } else if (k === '+' || k === '-' || k === '*' || k === '/') {
+    if (CALC.pending !== null && !CALC.fresh) {
+      const r = calcApply(CALC.acc, calcVal(), CALC.pending);
+      calcSet(r); CALC.acc = CALC.err ? null : r;
+    } else {
+      CALC.acc = calcVal();
+    }
+    CALC.pending = k; CALC.fresh = true; CALC.lastOp = null;
+  } else if (k === '=') {
+    if (CALC.pending !== null) {
+      CALC.lastOp = CALC.pending; CALC.lastArg = calcVal();
+      calcSet(calcApply(CALC.acc, CALC.lastArg, CALC.pending));
+      CALC.pending = null; CALC.acc = null;
+    } else if (CALC.lastOp) {                 // pressing = again repeats the last operation
+      calcSet(calcApply(calcVal(), CALC.lastArg, CALC.lastOp));
+    }
+    CALC.fresh = true;
+  } else if (k === 'C') {
+    calcReset();
+  } else if (k === 'back') {
+    if (!CALC.fresh) {
+      CALC.cur = CALC.cur.length > 1 ? CALC.cur.slice(0, -1) : '0';
+      if (CALC.cur === '-' || CALC.cur === '') CALC.cur = '0';
+    }
+  } else if (k === 'neg') {
+    if (CALC.cur !== '0') CALC.cur = CALC.cur.charAt(0) === '-'
+      ? CALC.cur.slice(1) : '-' + CALC.cur;
+  } else if (k === 'sqrt') {
+    const v = calcVal();
+    if (v < 0) { CALC.err = 'Invalid input'; } else { calcSet(Math.sqrt(v)); }
+    CALC.fresh = true;
+  } else if (k === 'inv') {
+    const v = calcVal();
+    if (v === 0) { CALC.err = 'Cannot divide by zero'; } else { calcSet(1 / v); }
+    CALC.fresh = true;
+  } else if (k === 'pct') {
+    /* Windows behaviour, quirk and all: after + or - the percentage is taken OF the
+       running total; after * or / it is just a division by a hundred. */
+    const v = calcVal();
+    if (CALC.pending === '+' || CALC.pending === '-') calcSet(CALC.acc * v / 100);
+    else calcSet(v / 100);
+    CALC.fresh = true;
+  } else if (k === 'MC') { CALC.mem = 0; CALC.hasMem = false; }
+  else if (k === 'MR') { CALC.cur = calcFmt(CALC.mem); CALC.fresh = true; }
+  else if (k === 'MS') { CALC.mem = calcVal(); CALC.hasMem = true; CALC.fresh = true; }
+  else if (k === 'M+') { CALC.mem += calcVal(); CALC.hasMem = true; CALC.fresh = true; }
+  else if (k === 'M-') { CALC.mem -= calcVal(); CALC.hasMem = true; CALC.fresh = true; }
+
+  calcPaint();
+}
+
+function calcShow(on) {
+  CALC.open = on;
+  const el = $('#calc');
+  el.classList.toggle('on', on);
+  $('#calcbtn').classList.toggle('live', on);
+  if (on) {
+    CALC.opens++;
+    if (CALC.x === null) {
+      /* First open: bottom-left of the question pane. Clear of the palette and the Submit
+         button on the right, and clear of the action bar below. The student can drag it
+         anywhere from there, and it stays where they put it for the rest of the paper. */
+      const h = el.offsetHeight || 451;
+      CALC.x = 24;
+      CALC.y = Math.max(70, window.innerHeight - h - 78);
+    }
+    calcMove(CALC.x, CALC.y);
+    calcPaint();
+  }
+  log(on ? 'calcopen' : 'calcclose', S.cur);
+}
+function calcMove(x, y) {
+  const el = $('#calc');
+  const w = el.offsetWidth || 290, h = el.offsetHeight || 430;
+  CALC.x = Math.min(Math.max(4, x), Math.max(4, window.innerWidth - w - 4));
+  CALC.y = Math.min(Math.max(4, y), Math.max(4, window.innerHeight - h - 4));
+  el.style.left = CALC.x + 'px';
+  el.style.top = CALC.y + 'px';
+}
+
+$('#calcpad').addEventListener('click', e => {
+  const b = e.target.closest('button[data-k]');
+  if (b) calcPress(b.getAttribute('data-k'));
+});
+$('#calcbtn').onclick = () => calcShow(!CALC.open);
+$('#calcclose').onclick = () => calcShow(false);
+
+/* drag by the title bar */
+(() => {
+  const bar = $('#calcdrag');
+  let dx = 0, dy = 0, dragging = false;
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('#calcclose')) return;
+    dragging = true;
+    dx = e.clientX - CALC.x; dy = e.clientY - CALC.y;
+    bar.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  bar.addEventListener('pointermove', e => {
+    if (dragging) calcMove(e.clientX - dx, e.clientY - dy);
+  });
+  const stop = e => {
+    if (!dragging) return;
+    dragging = false;
+    try { bar.releasePointerCapture(e.pointerId); } catch (x) {}
+  };
+  bar.addEventListener('pointerup', stop);
+  bar.addEventListener('pointercancel', stop);
+})();
+window.addEventListener('resize', () => { if (CALC.open) calcMove(CALC.x, CALC.y); });
 
 /* ---------------- grading ---------------- */
 const keyCache = {};
@@ -1395,6 +1643,7 @@ async function finish() {
   window.removeEventListener('beforeunload', beforeUnload);
   window.removeEventListener('pagehide', saveProgress);
   document.removeEventListener('visibilitychange', onHide);
+  if (CALC.open) calcShow(false);   // don't leave it floating over the report
   log('leave', S.cur);
   S.endT = clk();
   const g = await grade();
@@ -1417,8 +1666,35 @@ function analyse(g, segs) {
     answered: g[i].given !== null, marked: S.marked[i],
     method: unveil(q.m, CONFIG.SALT + '|' + q.id),
     key: unveil(q.a, CONFIG.SALT + '|A|' + q.id),
-    firstAnsAt: null, changes: 0, hadRight: false
+    firstAnsAt: null, changes: 0, hadRight: false,
+    calcOpens: 0, calcKeys: 0, calcSecs: 0, calcTyped: 0
   }));
+
+  /* Calculator usage, per question. calcSecs is time with the panel open while this
+     question was on screen — the honest cost of reaching for it. The panel can stay open
+     across question changes, so time is charged to whichever question was in front. */
+  {
+    let curQ = null, isOpen = false, since = 0;
+    const charge = t => {
+      if (isOpen && curQ !== null && per[curQ]) {
+        per[curQ].calcSecs += Math.max(0, t - since);
+      }
+    };
+    for (const e of S.ev) {
+      switch (e.type) {
+        case 'enter':     curQ = e.q; since = e.t; break;
+        case 'leave':     charge(e.t); curQ = null; break;
+        case 'gap':       charge(e.t); isOpen = false; break;   // away; the panel is gone
+        case 'calcopen':  charge(e.t); isOpen = true; since = e.t;
+                          if (per[e.q]) per[e.q].calcOpens++; break;
+        case 'calcclose': charge(e.t); isOpen = false; break;
+        case 'calc':      if (per[e.q]) per[e.q].calcKeys++; break;
+        case 'calckey':   if (per[e.q]) per[e.q].calcTyped++; break;
+      }
+    }
+    charge(S.endT);
+    per.forEach(p => { p.calcSecs = Math.round(p.calcSecs); });
+  }
   segs.forEach(s => { if (s.q < 0) return;          // an interruption is charged to no question
     per[s.q].t += (s.to - s.from); per[s.q].visits++; });
 
@@ -1791,7 +2067,10 @@ function payload(A) {
     score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
     wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
     q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
-      a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls })),
+      a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls,
+      co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
+    calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
+    calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
     ua: navigator.userAgent.slice(0, 120), v: 1
   };
 }
