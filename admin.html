@@ -63,6 +63,17 @@ button,input,select{font-family:inherit;font-size:inherit}
 .tile small{display:block;font-family:var(--f-mono);font-size:11.5px;color:var(--ink-3);
   margin-top:4px}
 
+/* The passcode faculty reads out at the centre, plus the box to rotate it. */
+.pcline{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-2)}
+.pclab{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.pcnow{font-family:var(--f-mono);font-size:19px;font-weight:600;letter-spacing:.04em;
+  margin-top:4px;word-break:break-all}
+.pcedit{display:flex;gap:6px;margin-top:8px}
+.pcedit input{flex:1;min-width:0;font-family:var(--f-mono);font-size:13px;padding:7px 8px;
+  border:1.5px solid var(--rule);background:#fff;color:var(--ink)}
+.pcedit input:focus{outline:none;border-color:var(--navy)}
+.pcedit .btn{margin:0;padding:7px 10px;font-size:12px;white-space:nowrap}
+
 h2.sec{font-family:var(--f-disp);font-size:22px;font-weight:600;margin:36px 0 0;
   letter-spacing:-.01em}
 h2.sec small{font-family:var(--f-ui);font-size:12.5px;color:var(--ink-3);font-weight:400;
@@ -159,6 +170,9 @@ function msg(t, cls){ const m=$('#msg'); m.textContent=t; m.className='msg on '+
 function hide(){ $('#msg').className='msg'; }
 const mmss = s => { s=Math.max(0,Math.round(s));
   return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); };
+/* HTML-escape, for any server value dropped into innerHTML. */
+const h = v => String(v===null||v===undefined ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const dt = v => { const d=new Date(v); return isNaN(d)?'—' :
   d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+
   d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}); };
@@ -180,7 +194,7 @@ async function loadSessions(){
       const until = p.open_until ? new Date(p.open_until) : null;
       const openNow = !!p.openNow;
       el.innerHTML =
-        '<div class="k">' + p.name + (p.ready ? '' : ' <em>(not built)</em>') + '</div>' +
+        '<div class="k">' + h(p.name) + (p.ready ? '' : ' <em>(not built)</em>') + '</div>' +
         '<div class="v" style="font-size:19px;color:' + (openNow ? '#1B5E3F' : '#8A5A00') + '">' +
           (openNow ? 'Open' : 'Closed') + '</div>' +
         '<div class="s">' + (openNow && until
@@ -188,7 +202,17 @@ async function loadSessions(){
             : 'students cannot start it') + '</div>' +
         (p.ready ? '<button class="btn-g btn" style="margin-top:10px;width:100%" ' +
           'data-paper="' + p.id + '" data-open="' + (openNow ? '0' : OPEN_MINS) + '">' +
-          (openNow ? 'Close now' : 'Open for ' + OPEN_MINS + ' min') + '</button>' : '');
+          (openNow ? 'Close now' : 'Open for ' + OPEN_MINS + ' min') + '</button>' : '') +
+        /* The passcode faculty reads out, and the box to rotate it between batches. */
+        '<div class="pcline">' +
+          '<div class="pclab">Passcode</div>' +
+          '<div class="pcnow" id="pcnow-' + p.id + '">' + h(p.passcode || '—') + '</div>' +
+          '<div class="pcedit">' +
+            '<input type="text" id="pcin-' + p.id + '" placeholder="new passcode" ' +
+              'autocomplete="off" spellcheck="false">' +
+            '<button class="btn-g btn" data-pc="' + p.id + '">Change</button>' +
+          '</div>' +
+        '</div>';
       box.appendChild(el);
     });
   }catch(e){ box.innerHTML = ''; }
@@ -208,6 +232,35 @@ document.addEventListener('click', async e => {
     const j = await r.json();
     if(!j.ok) msg('Could not change that paper: '+(j.reason||'unknown'),'err');
   }catch(err){ msg('Could not reach the server to change that paper.','err'); }
+  loadSessions();
+});
+
+/* Rotate a paper's passcode. The new one takes effect immediately — anyone
+   already inside the test is unaffected, only the next unlock is checked. */
+document.addEventListener('click', async e => {
+  const b = e.target.closest('#sessions button[data-pc]');
+  if(!b) return;
+  const paper = b.getAttribute('data-pc');
+  const box = document.getElementById('pcin-' + paper);
+  const code = (box ? box.value : '').trim();
+  if(code.length < 3){
+    msg('A passcode needs at least 3 characters.','err');
+    if(box) box.focus();
+    return;
+  }
+  const label = b.textContent;
+  b.disabled = true; b.textContent = '…';
+  try{
+    const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=paper_passcode&key=' +
+      encodeURIComponent(SS.key);
+    const r = await fetch(u, { method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ paper: paper, passcode: code }) });
+    const j = await r.json();
+    if(j.ok){ if(box) box.value=''; msg('Passcode changed to "'+j.passcode+'".','ok'); }
+    else msg('Could not change that passcode: '+(j.reason||'unknown'),'err');
+  }catch(err){ msg('Could not reach the server to change that passcode.','err'); }
+  if(b.isConnected){ b.disabled = false; b.textContent = label; }
   loadSessions();
 });
 
