@@ -471,20 +471,24 @@ section.blk:last-of-type{border-bottom:0}
    Static build — deploy anywhere. Peer data via optional endpoint.
    ============================================================ */
 const CONFIG = {
-  /* REQUIRED. The Apps Script Web App /exec URL. Without it no one can sit the paper,
-     because the PIN is checked against the enrolled list on the server. */
-  ENDPOINT: "https://script.google.com/macros/s/AKfycbz1IdrmHo9e7Py4SJtXIa33Swu89MCfTj1tRN8T1ksYCxqTLV252FTzyxWhxbeG0tSoJQ/exec",
-  /* Deliberate downgrade for a centre with no working connection: set true and the paper
-     opens for any PIN of four characters or more, with no name and no batch data.
-     Leave false in normal use. */
+  /* The backend base URL. Used for the greeting, peer data and recording attempts —
+     but NOT for opening the paper: that check is local (see PINS below). */
+  ENDPOINT: "https://ims-cat26.vipul-tg.workers.dev",
+  /* Deliberate downgrade for a centre with no working connection AND no baked-in
+     enrolment table: opens the paper for any PIN of four characters or more, with no
+     name and no recording. Leave false in normal use. */
   OFFLINE_FALLBACK: false,
   PAPER_ID: "REC-AR-01",
   PAPER_NAME: "Arithmetic — Most Expected CAT 2026 — Recalibrated Set",
   DURATION: 40 * 60,
   SALT: "IMSGJ-CAT26-REC-AR-01",
+  PIN_SALT: "IMSGJ-PIN-REC-AR-01",
+  PIN_ITER: 12000,       // hash rounds — makes offline guessing of the PIN list expensive
   PEER_MIN: 30,          // real peer data replaces the model at this many attempts
   BLEED_AFTER: 45,       // seconds on a blank question before it counts as bleed
-  SUNK_AFTER: 120        // seconds on a wrong question before it counts as sunk
+  SUNK_AFTER: 120,       // seconds on a wrong question before it counts as sunk
+  SEND_JITTER: 20,       // seconds of random spread on auto-submit, to flatten the burst
+  SEND_TRIES: 4          // send attempts before the payload is parked for a later retry
 };
 
 const QS = [
@@ -847,6 +851,12 @@ const QS = [
 ];
 const N = QS.length;
 
+/* Enrolled PINs as salted, iterated hashes — 16 hex characters each. This is the whole
+   enrolment gate: it runs locally, so opening the paper never touches the network and
+   never queues behind anyone else. Student names are deliberately NOT here; they are
+   fetched afterwards and never block the start. */
+const PINS = ["1f2f73ca7c01b218", "e4306ab02ea04124", "edd45a5f8e958b67", "4cc086a0ede00f59"];
+
 /* ---------------- state ---------------- */
 const S = {
   pin: "", name: "", batch: "", centre: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
@@ -893,11 +903,33 @@ const REASON = {
   missing: 'Something was missing from the request. Reload and try again.'
 };
 
+/* Salted, iterated SHA-256 of a PIN, truncated to 64 bits. The iteration count is what
+   makes recovering the enrolled PIN list from this file expensive rather than instant.
+   Must match the identical loop in build.py. */
+function pinHash(pin) {
+  let h = hex(sha256sync(CONFIG.PIN_SALT + '|' + pin));
+  for (let i = 0; i < CONFIG.PIN_ITER; i++) h = hex(sha256sync(h));
+  return h.slice(0, 16);
+}
+
 async function verifyPin() {
   const v = $('#pin').value.trim().toUpperCase();
   $('#gatewarn').classList.remove('on');
   if (v.length < 4) { gateMsg('Enter your IMS PIN — at least four characters.'); return; }
 
+  /* ---- the normal path: local enrolment check, no network ---- */
+  if (PINS && PINS.length) {
+    gateBusy(true);
+    await new Promise(r => setTimeout(r, 0));     // let the button paint before we block
+    const ok = PINS.indexOf(pinHash(v)) >= 0;
+    gateBusy(false);
+    if (!ok) { gateMsg(REASON.unknown); return; }
+    welcome(v, { pending: true });
+    fetchWho(v);                                   // greeting + prior notice, non-blocking
+    return;
+  }
+
+  /* ---- fallback: no enrolment table was baked in, so ask the server ---- */
   if (!CONFIG.ENDPOINT) {
     if (!CONFIG.OFFLINE_FALLBACK) {
       gateMsg('<b>This paper is not open yet.</b> It has not been connected to the IMS ' +
@@ -909,7 +941,7 @@ async function verifyPin() {
 
   gateBusy(true);
   try {
-    const r = await fetch(api('action=verify&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
+    const r = await fetch(api('action=who&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
       '&pin=' + encodeURIComponent(v)));
     const j = await r.json();
     gateBusy(false);
@@ -924,37 +956,64 @@ async function verifyPin() {
   }
 }
 
-function welcome(pin, j) {
-  S.pin = pin; S.name = j.name || ''; S.batch = j.batch || ''; S.centre = j.centre || '';
-  S.practice = !!j.attempted; S.offline = !!j.offline;
+/* The paper is already open by the time this runs. If it fails, nothing breaks —
+   the student simply sits the paper without a name on the header. */
+async function fetchWho(pin) {
+  if (!CONFIG.ENDPOINT) { S.pending = false; paintWelcome(); return; }
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch(api('action=who&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
+      '&pin=' + encodeURIComponent(pin)), { signal: ctl.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    if (S.pin !== pin) return;                     // student went back and changed the PIN
+    if (j && j.ok) {
+      S.name = j.name || ''; S.batch = j.batch || ''; S.centre = j.centre || '';
+      S.practice = !!j.attempted; S.prior = j.prior || null;
+    }
+  } catch (e) { /* nicety only */ }
+  S.pending = false;
+  paintWelcome();
+}
 
-  const first = (j.name || '').trim().split(/\s+/)[0];
-  $('#welname').textContent = first ? 'Welcome, ' + first + '.' : 'PIN accepted.';
-  const bits = [pin];
-  if (j.batch) bits.push(j.batch);
-  if (j.centre) bits.push(j.centre);
+function welcome(pin, j) {
+  j = j || {};
+  S.pin = pin; S.name = j.name || ''; S.batch = j.batch || ''; S.centre = j.centre || '';
+  S.practice = !!j.attempted; S.offline = !!j.offline; S.prior = j.prior || null;
+  S.pending = !!j.pending;
+  paintWelcome();
+  $('#gateform').hidden = true;
+  $('#gatewelcome').hidden = false;
+}
+
+function paintWelcome() {
+  const first = (S.name || '').trim().split(/\s+/)[0];
+  $('#welname').textContent = first ? 'Welcome, ' + first + '.'
+    : (S.pending ? 'PIN accepted.' : 'PIN accepted.');
+  const bits = [S.pin];
+  if (S.batch) bits.push(S.batch);
+  if (S.centre) bits.push(S.centre);
   $('#welmeta').textContent = bits.join('   ·   ');
 
   const w = $('#welwarn');
   w.className = 'warnbox';
-  if (j.offline) {
+  if (S.offline) {
     w.innerHTML = 'Running without the enrolment check. Your attempt will not be recorded ' +
       'and there is no batch comparison.';
     w.classList.add('on');
-  } else if (j.attempted) {
-    const d = j.prior && j.prior.date ? new Date(j.prior.date) : null;
+  } else if (S.practice) {
+    const d = S.prior && S.prior.date ? new Date(S.prior.date) : null;
     w.innerHTML = '<b>You have already sat this paper</b>' +
       (d ? ' on ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '') +
-      (j.prior && j.prior.score !== '' && j.prior.score !== undefined
-        ? ', scoring ' + j.prior.score : '') +
+      (S.prior && S.prior.score !== '' && S.prior.score !== undefined
+        ? ', scoring ' + S.prior.score : '') +
       '. You may sit it again, but this attempt will be marked <b>practice</b> and left ' +
       'out of the batch comparison.';
     w.classList.add('on');
   }
 
-  $('#gateform').hidden = true;
-  $('#gatewelcome').hidden = false;
-  $('#pinlbl').textContent = first ? first + ' · ' + pin : pin;
+  $('#pinlbl').textContent = first ? first + ' · ' + S.pin : S.pin;
   $('#pinlbl2').textContent = $('#pinlbl').textContent;
 }
 
@@ -963,7 +1022,8 @@ $('#welgo').onclick = () => show('instr');
 $('#welback').onclick = () => {
   $('#gatewelcome').hidden = true; $('#gateform').hidden = false;
   $('#pin').value = ''; $('#pin').focus();
-  S.pin = ''; S.name = ''; S.practice = false;
+  S.pin = ''; S.name = ''; S.batch = ''; S.centre = '';
+  S.practice = false; S.prior = null; S.pending = false;
 };
 $('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin(); });
 
@@ -1562,7 +1622,41 @@ async function sendAttempt(A) {
   lastPayload = payload(A); lastA = A;
   return postPayload();
 }
-async function postPayload() {
+/* Attempts that could not be sent are parked here and re-sent the next time this paper
+   is opened on this machine. The backend de-duplicates on pin|paper|startedAt, so a
+   payload arriving twice can never become two rows. */
+const QKEY = 'ims_cat26_queue_' + CONFIG.PAPER_ID;
+function park(p) {
+  try {
+    const q = JSON.parse(localStorage.getItem(QKEY) || '[]');
+    if (!q.some(x => x.startedAt === p.startedAt && x.pin === p.pin)) q.push(p);
+    localStorage.setItem(QKEY, JSON.stringify(q.slice(-20)));
+  } catch (e) {}
+}
+function unpark(p) {
+  try {
+    const q = JSON.parse(localStorage.getItem(QKEY) || '[]');
+    localStorage.setItem(QKEY, JSON.stringify(
+      q.filter(x => !(x.startedAt === p.startedAt && x.pin === p.pin))));
+  } catch (e) {}
+}
+async function flushParked() {
+  if (!CONFIG.ENDPOINT) return;
+  let q = [];
+  try { q = JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) { return; }
+  for (const p of q) {
+    try {
+      const r = await fetch(CONFIG.ENDPOINT, { method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p) });
+      const j = await r.json();
+      if (j && j.ok) unpark(p);
+    } catch (e) { return; }        // still offline; leave the rest parked
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function postPayload(manual) {
   const B = $('#r-banner');
   if (!CONFIG.ENDPOINT || S.offline) {
     B.innerHTML = '<div class="banner">This attempt has <b>not</b> been sent to IMS — the ' +
@@ -1571,35 +1665,69 @@ async function postPayload() {
       '<b>Download my attempt data</b> to keep a copy.</div>';
     return;
   }
+
+  /* On an auto-submit every student in the room finishes in the same second. A short
+     random wait spreads the burst; nobody notices it, because the full report is already
+     on screen while this runs. A manual submit goes straight out. */
+  let jitter = 0;
+  if (S.autoSub && !manual && CONFIG.SEND_JITTER > 0) {
+    jitter = Math.floor(Math.random() * CONFIG.SEND_JITTER * 1000);
+  }
   B.innerHTML = '<div class="banner">Sending your attempt to IMS…</div>';
-  try {
-    const r = await fetch(CONFIG.ENDPOINT, { method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(lastPayload) });
-    const j = await r.json();
-    if (!j.ok) {
+  if (jitter) await sleep(jitter);
+
+  let lastReason = '';
+  for (let attempt = 1; attempt <= CONFIG.SEND_TRIES; attempt++) {
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 20000);
+      const r = await fetch(CONFIG.ENDPOINT, { method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(lastPayload), signal: ctl.signal });
+      clearTimeout(t);
+      const j = await r.json();
+
+      if (j && j.ok) {
+        unpark(lastPayload);
+        B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
+          'color:#1B5E3F">Recorded' + (j.practice
+            ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
+          (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
+            ' now sat this paper.' : '') + '</div>';
+        if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
+        $('#retry').style.display = 'none';
+        return;
+      }
+
+      /* A refusal is a decision, not a glitch — the roster said no. Retrying cannot
+         change the answer, so stop. */
+      lastReason = REASON[j && j.reason] || (j && j.reason) || 'unknown reason';
       B.innerHTML = '<div class="banner err">IMS did not accept this attempt (' +
-        (REASON[j.reason] || j.reason || 'unknown reason') + ') Your result below is ' +
-        'complete. Download your data and send it to your centre.</div>';
+        lastReason + ') Your result below is complete. Download your data and send it ' +
+        'to your centre.</div>';
       $('#retry').style.display = '';
       return;
+
+    } catch (e) {
+      lastReason = 'the server could not be reached';
+      if (attempt < CONFIG.SEND_TRIES) {
+        const wait = Math.round((Math.pow(2, attempt) * 1000) + Math.random() * 1000);
+        B.innerHTML = '<div class="banner">Sending your attempt to IMS… ' +
+          '(attempt ' + (attempt + 1) + ' of ' + CONFIG.SEND_TRIES + ')</div>';
+        await sleep(wait);
+      }
     }
-    B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
-      'color:#1B5E3F">Recorded' + (j.practice
-        ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
-      (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
-        ' now sat this paper.' : '') + '</div>';
-    if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
-    $('#retry').style.display = 'none';
-  } catch (e) {
-    B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
-      'has not been recorded and the batch comparison is unavailable. Your result below is ' +
-      'complete and correct. Press <b>Retry</b>, or download your data and send it to your ' +
-      'centre.</div>';
-    $('#retry').style.display = '';
   }
+
+  /* Out of tries. Park it — it will go the next time this paper is opened here. */
+  park(lastPayload);
+  B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
+    'is <b>saved on this computer</b> and will be sent automatically the next time this ' +
+    'paper is opened here. Your result below is complete and correct. You can also press ' +
+    '<b>Retry</b> now, or download your data and send it to your centre.</div>';
+  $('#retry').style.display = '';
 }
-$('#retry').onclick = () => { if (lastPayload) postPayload(); };
+$('#retry').onclick = () => { if (lastPayload) postPayload(true); };
 
 function applyPeer(j, A) {
   j.peer.forEach(p => {
@@ -1612,6 +1740,9 @@ function applyPeer(j, A) {
     (j.pct !== undefined ? ' Your score puts you at the <b>' + j.pct +
       'th percentile</b> of the batch.' : '');
 }
+
+/* Anything stranded by a dead connection on a previous sitting goes out now, quietly. */
+flushParked();
 
 $('#dl').onclick = () => {
   const blob = new Blob([JSON.stringify(lastPayload || {}, null, 1)], { type: 'application/json' });
