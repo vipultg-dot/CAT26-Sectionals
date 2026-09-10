@@ -72,6 +72,17 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .warnbox{margin-top:18px;border-left:3px solid var(--red);background:#FBF0EF;padding:11px 13px;
   font-size:12.5px;color:#6E1B1B;display:none}
 .warnbox.on{display:block}
+.warnbox.info{border-color:var(--navy);background:#EEF2F9;color:#1F3864}
+.wel-eyebrow{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--ok)}
+.wel-name{font-family:var(--f-disp);font-size:34px;font-weight:600;letter-spacing:-.02em;
+  margin:8px 0 0;line-height:1.05}
+.wel-meta{font-family:var(--f-mono);font-size:12.5px;color:var(--ink-3);margin:9px 0 0;line-height:1.6}
+.btn-link{background:none;border:0;color:var(--ink-3);font-size:12.5px;padding:12px 0 0;
+  text-decoration:underline;text-underline-offset:3px;width:100%}
+.btn-link:hover{color:var(--navy)}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 
 /* ---------------- SHELL ---------------- */
 .wrap{max-width:var(--w);margin:0 auto;padding:0 24px}
@@ -289,12 +300,22 @@ section.blk:last-of-type{border-bottom:0}
       </div>
     </div>
     <div class="gateright">
-      <label for="pin">IMS PIN</label>
-      <input id="pin" autocomplete="off" spellcheck="false" placeholder="e.g. AHM24CAT0871">
-      <p class="hint">Your PIN identifies your attempt and places you in the batch comparison.
-        Enter it exactly as it appears on your IMS record.</p>
-      <div class="warnbox" id="gatewarn"></div>
-      <button class="btn" id="gatego">Continue &rarr;</button>
+      <div id="gateform">
+        <label for="pin">IMS PIN</label>
+        <input id="pin" autocomplete="off" spellcheck="false" placeholder="e.g. AHM26QA001">
+        <p class="hint">Enter your PIN exactly as it appears on your IMS record. It is checked
+          against the enrolled list before the paper opens.</p>
+        <div class="warnbox" id="gatewarn"></div>
+        <button class="btn" id="gatego">Verify PIN &rarr;</button>
+      </div>
+      <div id="gatewelcome" hidden>
+        <div class="wel-eyebrow">Verified</div>
+        <h3 class="wel-name" id="welname"></h3>
+        <p class="wel-meta" id="welmeta"></p>
+        <div class="warnbox" id="welwarn"></div>
+        <button class="btn" id="welgo">Continue to instructions &rarr;</button>
+        <button class="btn-link" id="welback">Not you? Use a different PIN</button>
+      </div>
     </div>
   </div>
 </div>
@@ -450,9 +471,13 @@ section.blk:last-of-type{border-bottom:0}
    Static build — deploy anywhere. Peer data via optional endpoint.
    ============================================================ */
 const CONFIG = {
-  /* Paste the Apps Script Web App URL here to switch peer comparison on.
-     Leave empty and everything except peer data still works. */
-  ENDPOINT: "https://script.google.com/macros/s/AKfycbz1IdrmHo9e7Py4SJtXIa33Swu89MCfTj1tRN8T1ksYCxqTLV252FTzyxWhxbeG0tSoJQ/exec",
+  /* REQUIRED. The Apps Script Web App /exec URL. Without it no one can sit the paper,
+     because the PIN is checked against the enrolled list on the server. */
+  ENDPOINT: "",
+  /* Deliberate downgrade for a centre with no working connection: set true and the paper
+     opens for any PIN of four characters or more, with no name and no batch data.
+     Leave false in normal use. */
+  OFFLINE_FALLBACK: false,
   PAPER_ID: "REC-AR-01",
   PAPER_NAME: "Arithmetic — Most Expected CAT 2026 — Recalibrated Set",
   DURATION: 40 * 60,
@@ -824,7 +849,7 @@ const N = QS.length;
 
 /* ---------------- state ---------------- */
 const S = {
-  pin: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
+  pin: "", name: "", batch: "", centre: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
   ans: Array(N).fill(null),      // option index 1..4 | string | null
   marked: Array(N).fill(false),
   seen: Array(N).fill(false),
@@ -846,26 +871,101 @@ function show(id) { document.querySelectorAll('.screen').forEach(e => e.classLis
 
 /* ---------------- gate ---------------- */
 const LSKEY = 'ims.cat26.' + CONFIG.PAPER_ID;
-$('#gatego').onclick = () => {
-  const v = $('#pin').value.trim().toUpperCase();
+const api = q => CONFIG.ENDPOINT + (CONFIG.ENDPOINT.includes('?') ? '&' : '?') + q;
+
+function gateMsg(html, info) {
   const w = $('#gatewarn');
-  if (v.length < 4) { w.textContent = 'Enter your IMS PIN — at least four characters.';
-    w.classList.add('on'); return; }
-  S.pin = v;
-  let prior = null;
-  try { prior = JSON.parse(localStorage.getItem(LSKEY) || 'null'); } catch (e) {}
-  if (prior && prior.pin === v) {
-    w.innerHTML = '<b>You have already sat this paper</b> on ' +
-      new Date(prior.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) +
-      ', scoring ' + prior.score + '. You may take it again, but this attempt will be marked ' +
-      '<b>practice</b> and left out of the batch comparison.';
-    w.classList.add('on');
-    S.practice = true;
-  }
-  $('#pinlbl').textContent = v; $('#pinlbl2').textContent = v;
-  show('instr');
+  w.innerHTML = html; w.classList.add('on'); w.classList.toggle('info', !!info);
+}
+function gateBusy(on) {
+  const b = $('#gatego');
+  b.disabled = on;
+  b.innerHTML = on ? '<span class="spin"></span> Checking…' : 'Verify PIN &rarr;';
+}
+
+const REASON = {
+  unknown: 'That PIN is not on the enrolled list for this paper. Check it against your IMS ' +
+    'record — if it is right, tell your centre and they will add you.',
+  inactive: 'That PIN is on the list but is not currently active. Please speak to your centre.',
+  not_assigned: 'That PIN is enrolled, but this paper has not been assigned to you. ' +
+    'Your centre can tell you which papers are open to you.',
+  bad_key: 'Access denied.',
+  missing: 'Something was missing from the request. Reload and try again.'
 };
-$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#gatego').click(); });
+
+async function verifyPin() {
+  const v = $('#pin').value.trim().toUpperCase();
+  $('#gatewarn').classList.remove('on');
+  if (v.length < 4) { gateMsg('Enter your IMS PIN — at least four characters.'); return; }
+
+  if (!CONFIG.ENDPOINT) {
+    if (!CONFIG.OFFLINE_FALLBACK) {
+      gateMsg('<b>This paper is not open yet.</b> It has not been connected to the IMS ' +
+        'enrolment list, so no one can sit it. Please tell your centre.');
+      return;
+    }
+    return welcome(v, { name: '', batch: '', centre: '', offline: true });
+  }
+
+  gateBusy(true);
+  try {
+    const r = await fetch(api('action=verify&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
+      '&pin=' + encodeURIComponent(v)));
+    const j = await r.json();
+    gateBusy(false);
+    if (!j.ok) { gateMsg(REASON[j.reason] || 'That PIN could not be verified.'); return; }
+    welcome(v, j);
+  } catch (e) {
+    gateBusy(false);
+    if (CONFIG.OFFLINE_FALLBACK) return welcome(v, { name: '', offline: true });
+    gateMsg('<b>Could not reach the IMS server</b>, so your PIN cannot be checked and the ' +
+      'paper will not open. Check your connection and press Verify again. If it keeps ' +
+      'failing, tell your centre before sitting the paper.');
+  }
+}
+
+function welcome(pin, j) {
+  S.pin = pin; S.name = j.name || ''; S.batch = j.batch || ''; S.centre = j.centre || '';
+  S.practice = !!j.attempted; S.offline = !!j.offline;
+
+  const first = (j.name || '').trim().split(/\s+/)[0];
+  $('#welname').textContent = first ? 'Welcome, ' + first + '.' : 'PIN accepted.';
+  const bits = [pin];
+  if (j.batch) bits.push(j.batch);
+  if (j.centre) bits.push(j.centre);
+  $('#welmeta').textContent = bits.join('   ·   ');
+
+  const w = $('#welwarn');
+  w.className = 'warnbox';
+  if (j.offline) {
+    w.innerHTML = 'Running without the enrolment check. Your attempt will not be recorded ' +
+      'and there is no batch comparison.';
+    w.classList.add('on');
+  } else if (j.attempted) {
+    const d = j.prior && j.prior.date ? new Date(j.prior.date) : null;
+    w.innerHTML = '<b>You have already sat this paper</b>' +
+      (d ? ' on ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '') +
+      (j.prior && j.prior.score !== '' && j.prior.score !== undefined
+        ? ', scoring ' + j.prior.score : '') +
+      '. You may sit it again, but this attempt will be marked <b>practice</b> and left ' +
+      'out of the batch comparison.';
+    w.classList.add('on');
+  }
+
+  $('#gateform').hidden = true;
+  $('#gatewelcome').hidden = false;
+  $('#pinlbl').textContent = first ? first + ' · ' + pin : pin;
+  $('#pinlbl2').textContent = $('#pinlbl').textContent;
+}
+
+$('#gatego').onclick = verifyPin;
+$('#welgo').onclick = () => show('instr');
+$('#welback').onclick = () => {
+  $('#gatewelcome').hidden = true; $('#gateform').hidden = false;
+  $('#pin').value = ''; $('#pin').focus();
+  S.pin = ''; S.name = ''; S.practice = false;
+};
+$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin(); });
 
 /* ---------------- start ---------------- */
 $('#begin').onclick = () => {
@@ -1188,7 +1288,8 @@ const CL = {
 /* ---------------- render ---------------- */
 function render(A) {
   const d = new Date(S.startedAt);
-  $('#r-sub').textContent = S.pin + '  ·  ' + d.toLocaleDateString('en-IN',
+  $('#r-sub').textContent = (S.name ? S.name + '  ·  ' : '') + S.pin + '  ·  ' +
+    d.toLocaleDateString('en-IN',
     { day: 'numeric', month: 'long', year: 'numeric' }) + '  ·  ' +
     d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) +
     (A.auto ? '  ·  submitted by the clock' : '  ·  submitted early');
@@ -1446,7 +1547,8 @@ function drawTable(A) {
 /* ---------------- backend ---------------- */
 function payload(A) {
   return {
-    pin: S.pin, paper: CONFIG.PAPER_ID, startedAt: new Date(S.startedAt).toISOString(),
+    pin: S.pin, name: S.name, paper: CONFIG.PAPER_ID,
+    startedAt: new Date(S.startedAt).toISOString(),
     practice: !!S.practice, auto: A.auto, used: A.used,
     score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
     wasted: A.wasted, rho: A.rho,
@@ -1462,10 +1564,11 @@ async function sendAttempt(A) {
 }
 async function postPayload() {
   const B = $('#r-banner');
-  if (!CONFIG.ENDPOINT) {
-    B.innerHTML = '<div class="banner">Batch comparison is not switched on for this build, so the ' +
-      'Peer column stays empty and this attempt is not sent anywhere. Everything else on this page ' +
-      'is your real result. Use <b>Download my attempt data</b> to keep a copy.</div>';
+  if (!CONFIG.ENDPOINT || S.offline) {
+    B.innerHTML = '<div class="banner">This attempt has <b>not</b> been sent to IMS — the ' +
+      'paper was opened without the enrolment check, so there is nowhere to record it and ' +
+      'no batch comparison. Everything else on this page is your real result. Use ' +
+      '<b>Download my attempt data</b> to keep a copy.</div>';
     return;
   }
   B.innerHTML = '<div class="banner">Sending your attempt to IMS…</div>';
@@ -1474,16 +1577,25 @@ async function postPayload() {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(lastPayload) });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'rejected');
-    B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;color:#1B5E3F">' +
-      'Recorded' + (lastPayload.practice ? ' as a practice attempt — excluded from the batch comparison.'
-        : '.') + (j.n ? ' ' + j.n + ' students have now sat this paper.' : '') + '</div>';
+    if (!j.ok) {
+      B.innerHTML = '<div class="banner err">IMS did not accept this attempt (' +
+        (REASON[j.reason] || j.reason || 'unknown reason') + ') Your result below is ' +
+        'complete. Download your data and send it to your centre.</div>';
+      $('#retry').style.display = '';
+      return;
+    }
+    B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
+      'color:#1B5E3F">Recorded' + (j.practice
+        ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
+      (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
+        ' now sat this paper.' : '') + '</div>';
     if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
     $('#retry').style.display = 'none';
   } catch (e) {
-    B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt has not ' +
-      'been recorded and the batch comparison is unavailable. Your result below is complete and ' +
-      'correct. Press <b>Retry</b>, or download your data and send it to your centre.</div>';
+    B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
+      'has not been recorded and the batch comparison is unavailable. Your result below is ' +
+      'complete and correct. Press <b>Retry</b>, or download your data and send it to your ' +
+      'centre.</div>';
     $('#retry').style.display = '';
   }
 }
