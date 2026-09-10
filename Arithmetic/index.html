@@ -281,6 +281,25 @@ section.blk:last-of-type{border-bottom:0}
   .qactions .inner{padding-right:24px}
   .blkhead p{text-align:left}
 }
+/* ============ PASSCODE ============ */
+.pcbox{margin-top:34px;background:var(--navy-soft,#EAEFF8);border:1px solid #C9D6EC;
+  border-radius:11px;padding:22px 24px;max-width:640px}
+.pcbox h4{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--navy)}
+.pcbox p{margin:0 0 16px;font-size:14.5px;color:var(--ink-2,#4A4F5A);max-width:56ch}
+.pcrow{display:flex;gap:12px;flex-wrap:wrap}
+.pcrow input{flex:1;min-width:200px;padding:13px 15px;border:1.5px solid #C9D6EC;border-radius:7px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:16px;letter-spacing:.05em;background:#fff}
+.pcrow input:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(31,56,100,.14)}
+.pcwarn{display:none;margin-top:13px;padding:11px 14px;border-radius:7px;background:#FDECEA;
+  border:1px solid #F0BDB6;color:#8A2318;font-size:14px}
+.pcwarn.on{display:block}
+.pcok{background:#EAF2ED;border:1px solid #B5D6C2;color:#1B5E3F}
+
+/* ============ REVIEW BANNER ============ */
+.revbar{background:#1B5E3F;color:#fff;padding:11px 0;font-size:14px}
+.revbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.revbar a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+
 /* ============ ON-SCREEN CALCULATOR ============
    A deliberate clone of the exam's Windows-Standard calculator, awkwardness included:
    mouse only, no keyboard, no bracket, no history, "/" and "*" rather than the proper
@@ -424,7 +443,20 @@ section.blk:last-of-type{border-bottom:0}
       </div>
     </div>
 
-    <div class="startrow">
+    <!-- The passcode is checked on the server; it is not in this file. -->
+    <div class="pcbox" id="pcbox">
+      <h4>Passcode</h4>
+      <p>Your faculty will read out the passcode for this paper when the session begins at the
+        centre. The paper will not open without it.</p>
+      <div class="pcrow">
+        <input type="text" id="passcode" autocomplete="off" autocapitalize="none"
+               spellcheck="false" placeholder="Passcode">
+        <button class="btn" id="pcgo">Unlock paper</button>
+      </div>
+      <div class="pcwarn" id="pcwarn"></div>
+    </div>
+
+    <div class="startrow" id="startrow" hidden>
       <button class="btn btn-red" id="begin">Begin test &rarr;</button>
       <p class="startnote">Once you begin, leaving or reloading this page ends the attempt.
         Make sure you have 40 uninterrupted minutes.</p>
@@ -1112,8 +1144,97 @@ const REASON = {
   not_assigned: 'That PIN is enrolled, but this paper has not been assigned to you. ' +
     'Your centre can tell you which papers are open to you.',
   bad_key: 'Access denied.',
-  missing: 'Something was missing from the request. Reload and try again.'
+  missing: 'Something was missing from the request. Reload and try again.',
+  done: 'You have already sat this paper. It cannot be taken again — go back to Quest Summit ' +
+    'and use <b>Review</b> to see your report.',
+  closed: '<b>This paper is not open yet.</b> Your faculty opens it at the centre when the ' +
+    'session starts. It cannot be sat from home.',
+  bad_passcode: 'That passcode is not right. It is read out by your faculty at the start of ' +
+    'the session — ask them to repeat it.',
+  not_ready: 'This paper has not been released yet.',
+  not_open: 'This paper was never unlocked for you, so the attempt cannot be recorded. ' +
+    'Tell your centre before you leave, and download your data below.',
+  no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
+  no_attempt: 'There is no completed attempt to review for this paper.',
+  no_report: 'That attempt was recorded before the review feature existed, so the full report ' +
+    'cannot be rebuilt. Your score is still on your Quest Summit page.'
 };
+
+/* ---------------- Quest Summit: hub hand-off, passcode, review ----------------
+   The passcode is verified on the server and is not present anywhere in this file. */
+const QP = new URLSearchParams(location.search);
+const REVIEW_MODE = QP.get('review') === '1';
+const HUBKEY = 'ims_quest_pin';
+let unlocked = false;
+
+function pcWarn(html, ok) {
+  const w = $('#pcwarn');
+  w.innerHTML = html;
+  w.className = 'pcwarn on' + (ok ? ' pcok' : '');
+}
+
+async function unlockPaper() {
+  const code = $('#passcode').value.trim();
+  $('#pcwarn').className = 'pcwarn';
+  if (!code) { pcWarn('Enter the passcode your faculty read out.'); return; }
+  /* Held by reference: on success the whole box is replaced, so this button is gone by
+     the time the finally block runs. */
+  const btn = $('#pcgo');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await fetch(api('action=unlock'), {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ pin: S.pin, paper: CONFIG.PAPER_ID, passcode: code })
+    });
+    const j = await r.json();
+    if (!j.ok) { pcWarn(REASON[j.reason] || 'The paper could not be unlocked.'); return; }
+    unlocked = true;
+    $('#pcbox').classList.add('pcok');
+    $('#pcbox').innerHTML = '<h4>Paper unlocked</h4>' +
+      '<p style="margin:0">Begin when you are ready. The clock starts the moment you press it.</p>';
+    $('#startrow').hidden = false;
+    $('#begin').focus();
+  } catch (e) {
+    pcWarn('Could not reach the IMS server, so the paper cannot be unlocked. Check the ' +
+      'connection and try again.');
+  } finally {
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = 'Unlock paper'; }
+  }
+}
+
+/** Read-only replay of a finished attempt, rebuilt from the report stored at submission. */
+async function doReview(pin) {
+  S.pin = pin;
+  try {
+    const r = await fetch(api('action=review&pin=' + encodeURIComponent(pin) +
+      '&paper=' + encodeURIComponent(CONFIG.PAPER_ID)));
+    const j = await r.json();
+    if (!j.ok) {
+      gateMsg(REASON[j.reason] || 'That report could not be loaded.');
+      show('gate'); $('#gateform').hidden = false; $('#gatewelcome').hidden = true;
+      return;
+    }
+    S.name = j.name || '';
+    S.ended = true;                       // nothing here should try to save or submit
+    const d = j.received ? new Date(j.received) : null;
+    document.body.insertAdjacentHTML('afterbegin',
+      '<div class="revbar"><div class="wrap"><span><b>Reviewing a completed attempt</b>' +
+      (d ? ' &middot; sat on ' + d.toLocaleDateString('en-IN',
+        { day: 'numeric', month: 'long' }) : '') +
+      ' &middot; this paper cannot be taken again</span>' +
+      '<a href="../">&larr; Back to Quest Summit</a></div></div>');
+    render(j.report);
+    show('res');
+    const rt = $('#retry'); if (rt) rt.style.display = 'none';
+    const dl = $('#dl'); if (dl) dl.style.display = 'none';
+    const b = $('#r-banner');
+    if (b) b.innerHTML = '<div class="banner">This is the report from the attempt you have ' +
+      'already submitted. Nothing here is being re-recorded.</div>';
+  } catch (e) {
+    gateMsg('Could not reach the IMS server, so your report cannot be loaded right now.');
+    show('gate'); $('#gateform').hidden = false; $('#gatewelcome').hidden = true;
+  }
+}
 
 /* Salted, iterated SHA-256 of a PIN, truncated to 64 bits. The iteration count is what
    makes recovering the enrolled PIN list from this file expensive rather than instant.
@@ -1136,6 +1257,8 @@ async function verifyPin() {
     const ok = PINS.indexOf(pinHash(v)) >= 0;
     gateBusy(false);
     if (!ok) { gateMsg(REASON.unknown); return; }
+    try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
+    if (REVIEW_MODE) return doReview(v);           // arrived here to look, not to sit
     welcome(v, { pending: true });
     fetchWho(v);                                   // greeting + prior notice, non-blocking
     return;
@@ -1231,6 +1354,17 @@ function paintWelcome() {
 
 $('#gatego').onclick = verifyPin;
 $('#welgo').onclick = () => show('instr');
+$('#pcgo').onclick = unlockPaper;
+$('#passcode').addEventListener('keydown', e => { if (e.key === 'Enter') unlockPaper(); });
+
+/* Arriving from the Quest Summit page: the PIN travelled in this tab, so don't ask twice. */
+(() => {
+  let saved = null;
+  try { saved = sessionStorage.getItem(HUBKEY); } catch (e) {}
+  if (!saved) return;
+  const el = $('#pin');
+  if (el && !el.value) { el.value = saved; verifyPin(); }
+})();
 $('#welback').onclick = () => {
   $('#gatewelcome').hidden = true; $('#gateform').hidden = false;
   $('#pin').value = ''; $('#pin').focus();
@@ -2071,6 +2205,9 @@ function payload(A) {
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
+    /* The whole analysis, stored so the student can review this report later. The event
+       log it was derived from dies with this tab; this is what survives. */
+    report: A,
     ua: navigator.userAgent.slice(0, 120), v: 1
   };
 }
