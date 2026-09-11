@@ -142,6 +142,19 @@ h2.disp{font-family:var(--f-disp);font-weight:600;font-size:clamp(28px,3.4vw,40p
 .optn{font-family:var(--f-mono);font-size:13px;color:var(--ink-3);font-weight:600;padding-top:2px;min-width:20px}
 .opt.sel .optn{color:var(--navy)}
 .optv{font-size:16px}
+/* --- inline maths. Authoring subset: \frac{a}{b}  \sqrt{x}  ^{..}  _{..}  + symbols.
+   Plain text containing none of these renders exactly as it did before. --- */
+.qtext sup,.qtext sub,.optv sup,.optv sub,.meth sup,.meth sub{font-size:.68em;line-height:0}
+.qtext sup,.optv sup,.meth sup{vertical-align:.62em}
+.qtext sub,.optv sub,.meth sub{vertical-align:-.3em}
+.fr{display:inline-block;vertical-align:middle;text-align:center;margin:0 .16em;
+  font-size:.9em;line-height:1.18}
+.fr .fn{display:block;border-bottom:1.2px solid currentColor;padding:0 .26em .06em}
+.fr .fd{display:block;padding:.06em .26em 0}
+.fr .fr{font-size:.87em}
+.sq{display:inline-flex;align-items:flex-start;white-space:nowrap}
+.sq .sqr{padding-right:.02em}
+.sq .sqb{border-top:1.2px solid currentColor;padding:.06em .16em 0 .08em;margin-top:.22em}
 .titabox{max-width:340px}
 .titabox input{width:100%;padding:15px 16px;border:1.5px solid var(--rule);background:var(--card);
   font-family:var(--f-mono);font-size:20px;color:var(--ink);outline:none}
@@ -997,6 +1010,38 @@ const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
   if (x !== undefined) e.textContent = x; return e; };
 const now = () => Date.now();
+/* ---- inline maths renderer. Everything is HTML-escaped first, then a small
+   authoring subset is expanded: \frac{a}{b}, \sqrt{x}, ^{..}/^c, _{..}/_c and a
+   symbol table. A bank written before this existed contains none of those
+   characters and therefore renders byte-identically. ---- */
+const MSYM = { '\\le':'\u2264','\\ge':'\u2265','\\ne':'\u2260','\\pm':'\u00B1',
+  '\\times':'\u00D7','\\div':'\u00F7','\\cdot':'\u00B7','\\ldots':'\u2026',
+  '\\Rightarrow':'\u21D2','\\infty':'\u221E','\\pi':'\u03C0','\\deg':'\u00B0' };
+function mgrp(s, i) { let d = 0;
+  for (let j = i; j < s.length; j++) { if (s[j] === '{') d++;
+    else if (s[j] === '}') { d--; if (!d) return [s.slice(i + 1, j), j + 1]; } }
+  return [s.slice(i + 1), s.length]; }
+function mexp(s) { let o = '', i = 0;
+  while (i < s.length) {
+    if (s.substr(i, 6) === '\\frac{') { const a = mgrp(s, i + 5);
+      if (s[a[1]] === '{') { const b = mgrp(s, a[1]);
+        o += '<span class="fr"><span class="fn">' + mexp(a[0]) + '</span>'
+           + '<span class="fd">' + mexp(b[0]) + '</span></span>'; i = b[1]; continue; } }
+    if (s.substr(i, 6) === '\\sqrt{') { const r = mgrp(s, i + 5);
+      o += '<span class="sq"><span class="sqr">\u221A</span><span class="sqb">'
+         + mexp(r[0]) + '</span></span>'; i = r[1]; continue; }
+    if (s[i] === '^' || s[i] === '_') { const t = s[i] === '^' ? 'sup' : 'sub';
+      if (s[i + 1] === '{') { const g = mgrp(s, i + 1);
+        o += '<' + t + '>' + mexp(g[0]) + '</' + t + '>'; i = g[1]; continue; }
+      if (i + 1 < s.length) { o += '<' + t + '>' + s[i + 1] + '</' + t + '>'; i += 2; continue; } }
+    o += s[i]; i++; }
+  return o; }
+function MATH(src) { let s = String(src)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  for (const k in MSYM) s = s.split(k).join(MSYM[k]);
+  return mexp(s); }
+const elm = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
+  if (x !== undefined) e.innerHTML = MATH(x); return e; };
 const clk = () => Math.round((now() - S.t0) / 1000);
 function log(type, q, v) { S.ev.push({ t: clk(), type, q, v }); }
 function mmss(s) { s = Math.max(0, Math.round(s));
@@ -1088,7 +1133,8 @@ function offerResume() {
     if (PINS && PINS.length) {
       b.innerHTML = '<span class="spin"></span> Checking&hellip;';
       await new Promise(r => setTimeout(r, 0));
-      if (PINS.indexOf(pinHash(String(p.pin || '').toUpperCase())) < 0) {
+      if (PINS.indexOf(pinHash(String(p.pin || '').toUpperCase())) < 0 &&
+          !(await serverKnows(String(p.pin || '').toUpperCase()))) {
         clearProgress();
         $('#rsbox').hidden = true; $('#gateform').hidden = false;
         gateMsg('The saved attempt was for a PIN that is not on the enrolled list for this ' +
@@ -1245,23 +1291,39 @@ function pinHash(pin) {
   return h.slice(0, 16);
 }
 
+/* Does the worker's roster know this PIN for this paper? Consulted whenever the baked
+   list misses — which is every student enrolled after the paper was built. */
+async function serverKnows(v) {
+  if (!CONFIG.ENDPOINT) return false;
+  try {
+    const r = await fetch(api('action=who&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
+      '&pin=' + encodeURIComponent(v)));
+    const j = await r.json();
+    return !!(j && j.ok);
+  } catch (e) { return false; }
+}
 async function verifyPin() {
   const v = $('#pin').value.trim().toUpperCase();
   $('#gatewarn').classList.remove('on');
   if (v.length < 4) { gateMsg('Enter your IMS PIN — at least four characters.'); return; }
 
-  /* ---- the normal path: local enrolment check, no network ---- */
+  /* ---- fast path: the baked enrolment list, no network ---- */
   if (PINS && PINS.length) {
     gateBusy(true);
     await new Promise(r => setTimeout(r, 0));     // let the button paint before we block
     const ok = PINS.indexOf(pinHash(v)) >= 0;
     gateBusy(false);
-    if (!ok) { gateMsg(REASON.unknown); return; }
-    try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
-    if (REVIEW_MODE) return doReview(v);           // arrived here to look, not to sit
-    welcome(v, { pending: true });
-    fetchWho(v);                                   // greeting + prior notice, non-blocking
-    return;
+    if (ok) {
+      try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
+      if (REVIEW_MODE) return doReview(v);         // arrived here to look, not to sit
+      welcome(v, { pending: true });
+      fetchWho(v);                                 // greeting + prior notice, non-blocking
+      return;
+    }
+    /* A miss is not a refusal. This list is a snapshot frozen when the paper was built,
+       so anyone enrolled since is legitimately absent from it, and it is not the real
+       gate in any case: the worker re-checks the roster at unlock and again at submit.
+       Fall through and ask the server, which reads the roster the sheet keeps in sync. */
   }
 
   /* ---- fallback: no enrolment table was baked in, so ask the server ---- */
@@ -1281,6 +1343,8 @@ async function verifyPin() {
     const j = await r.json();
     gateBusy(false);
     if (!j.ok) { gateMsg(REASON[j.reason] || 'That PIN could not be verified.'); return; }
+    try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
+    if (REVIEW_MODE) return doReview(v);
     welcome(v, j);
   } catch (e) {
     gateBusy(false);
@@ -1446,14 +1510,14 @@ function goTo(i, first) {
   $('#qsub').textContent = q.sub;
   const ty = $('#qtype'); ty.textContent = q.type === 'TITA' ? 'TITA · no negative' : 'MCQ · +3 / −1';
   ty.className = 'chip' + (q.type === 'TITA' ? ' tita' : '');
-  $('#qtext').textContent = q.q;
+  $('#qtext').innerHTML = MATH(q.q);
   const body = $('#qbody'); body.innerHTML = '';
   if (q.type === 'MCQ') {
     const wrap = el('div', 'opts');
     q.opts.forEach((o, j) => {
       const b = el('button', 'opt' + (S.ans[S.cur] === j + 1 ? ' sel' : ''));
       b.appendChild(el('span', 'optn', '(' + (j + 1) + ')'));
-      b.appendChild(el('span', 'optv', o));
+      b.appendChild(elm('span', 'optv', o));
       b.onclick = () => pick(j + 1);
       wrap.appendChild(b);
     });
@@ -2174,9 +2238,9 @@ function drawTable(A) {
     const mr = el('tr', 'mrow');
     const mtd = el('td'); mtd.colSpan = 11;
     const mv = el('div', 'meth');
-    const ka = el('b'); ka.textContent = 'Answer: ' + p.key + '.  ';
+    const ka = el('b'); ka.innerHTML = 'Answer: ' + MATH(p.key) + '.  ';
     ka.style.color = 'var(--ok)';
-    mv.appendChild(ka); mv.appendChild(document.createTextNode(p.method));
+    mv.appendChild(ka); mv.appendChild(elm('span', '', p.method));
     mtd.appendChild(mv);
     mr.appendChild(mtd); mr.style.display = 'none'; tb.appendChild(mr);
     b.onclick = () => {
