@@ -389,6 +389,29 @@ section.blk:last-of-type{border-bottom:0}
 .rankbox .rlab{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--ink-3)}
 .rankbox .rnote{font-size:13px;color:var(--ink-2);line-height:1.55;flex:1 1 260px;min-width:0}
+
+/* ---- triage report ---- */
+.trilock{border:1px dashed var(--rule);padding:22px 24px;background:var(--paper-2);
+  font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-bottom:26px}
+.trilock b{color:var(--ink)}
+.trihead{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;margin-bottom:20px}
+.triscore{font-family:var(--f-disp);font-size:60px;font-weight:700;line-height:.88;
+  letter-spacing:-.03em;color:var(--navy)}
+.triscore small{font-size:19px;font-weight:500;color:var(--ink-3);margin-left:4px}
+.triband{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--navy);color:var(--navy);padding:5px 11px;margin-bottom:7px}
+.trisum{flex:1 1 280px;min-width:0;font-size:14px;line-height:1.6;color:var(--ink-2)}
+.tribars{display:grid;gap:15px;margin-bottom:22px}
+.tribar .tl{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  margin-bottom:6px}
+.tribar .tn{font-weight:700;font-size:14.5px}
+.tribar .tn em{font-style:normal;font-weight:400;color:var(--ink-3);font-size:12.5px;
+  margin-left:8px}
+.tribar .tv{font-family:var(--f-mono);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.tribar .tt{height:9px;background:var(--paper-2);border:1px solid var(--rule);overflow:hidden}
+.tribar .tf{height:100%;background:var(--navy)}
+.tribar .td{font-size:12.5px;color:var(--ink-3);margin-top:6px;line-height:1.5}
+.triprov{font-size:12px;color:var(--ink-3);font-style:italic;margin:0 0 26px}
 </style>
 </head>
 <body>
@@ -622,8 +645,11 @@ section.blk:last-of-type{border-bottom:0}
 
     <section class="blk">
       <div class="blkhead"><h3>Triage</h3>
-        <p>The order you answered questions in, against how hard each one is.</p></div>
-      <p class="blkintro">A candidate who triages well answers cheap questions early and expensive ones
+        <p>How well you chose, ordered and abandoned &mdash; scored against what the batch
+          actually did on each question.</p></div>
+      <div id="triagepanel"></div>
+      <p class="blkintro">Below: the order you answered questions in, against how hard each one
+        proved to be. A candidate who triages well answers cheap questions early and expensive ones
         late, so the dots drift upward. Dots high on the left are the expensive habit: hard questions
         taken on before the easy marks were banked.</p>
       <div class="plot" id="triage"></div>
@@ -1318,6 +1344,7 @@ async function doReview(pin) {
     render(j.report);
     show('res');
     applyRank();                      // rank has moved since they sat it
+    renderTriage(j.triage);           // present only once faculty has published it
     const rt = $('#retry'); if (rt) rt.style.display = 'none';
     const b = $('#r-banner');
     if (b) b.innerHTML = '<div class="banner">This is the report from the attempt you have ' +
@@ -2250,6 +2277,52 @@ function tip(ev, p, dur) {
   t.style.top = (ev.clientY + 16) + 'px';
 }
 
+/* Triage is published by faculty once the batch has finished, so it is deliberately
+   absent until then rather than computed off the first handful of finishers. */
+function renderTriage(tri) {
+  const box = $('#triagepanel');
+  if (!box) return;
+  if (!tri || typeof tri.score !== 'number') {
+    box.innerHTML = '<div class="trilock"><b>Your triage report unlocks when the batch ' +
+      'completes.</b> It scores every decision you made against what the rest of the batch ' +
+      'did on the same question, so it cannot be worked out until they have all sat the ' +
+      'paper. Everything else on this page is final now.</div>';
+    return;
+  }
+  const band = tri.score >= 80 ? 'Sharp' : tri.score >= 65 ? 'Solid'
+             : tri.score >= 50 ? 'Leaky' : 'Costly';
+  const d = tri.detail || {};
+  const rows = [
+    ['Conversion', 'the time your correct answers cost', tri.conv,
+      d.nCorrect ? d.nCorrect + ' correct, ' + human(d.spentCorrect) + ' spent against a ' +
+        human(d.benchCorrect) + ' benchmark' : 'nothing was answered correctly'],
+    ['Leakage', 'time spent on answers that were wrong', tri.leak,
+      d.nWrong ? d.nWrong + ' wrong, costing ' + human(d.leakRaw)
+               : 'no marks lost to wrong answers'],
+    ['Decision', 'the questions you skipped, and how fast you let go', tri.dec,
+      d.nSkipped ? d.nSkipped + ' left alone, decided in ' + human(d.decideTime) +
+        ' — and you went after ' + d.coverage + '% of the marks the batch showed were reachable'
+        : 'nothing was read and left'],
+  ];
+  box.innerHTML =
+    '<div class="trihead">' +
+      '<div><div class="triband">' + band + '</div>' +
+      '<div class="triscore">' + tri.score + '<small>/100</small></div></div>' +
+      '<p class="trisum">Every second of the paper lands in one of three places: time that ' +
+      'bought marks, time that bought nothing, and time spent deciding not to try. This is ' +
+      'how well those three were managed &mdash; not how much you knew.</p>' +
+    '</div>' +
+    '<div class="tribars">' + rows.map(r =>
+      '<div class="tribar"><div class="tl">' +
+        '<span class="tn">' + r[0] + '<em>' + r[1] + '</em></span>' +
+        '<span class="tv">' + r[2] + '</span></div>' +
+        '<div class="tt"><div class="tf" style="width:' + Math.max(1, r[2]) + '%"></div></div>' +
+        '<div class="td">' + r[3] + '</div></div>').join('') +
+    '</div>' +
+    '<p class="triprov">Scored against ' + (d.used ? human(d.used) + ' of paper time' : 'your paper') +
+    '. The bands are provisional while the first cohorts sit these papers.</p>';
+}
+
 function drawTriage(A) {
   const W = 900, H = 300, mL = 46, mR = 16, mT = 16, mB = 40;
   const pts = A.per.filter(p => p.ansOrder);
@@ -2473,6 +2546,7 @@ async function postPayload(manual) {
           (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
             ' now sat this paper.' : '') + '</div>';
         applyRank();                               // its own call — see the note there
+        renderTriage(null);                        // not published at submission time
         if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
         $('#retry').style.display = 'none';
         return;
