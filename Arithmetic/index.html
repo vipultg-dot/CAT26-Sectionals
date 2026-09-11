@@ -378,6 +378,17 @@ section.blk:last-of-type{border-bottom:0}
   color:inherit;opacity:.72;text-decoration:none;border-bottom:1px solid currentColor;
   padding-bottom:2px;margin-bottom:16px}
 .homelink:hover{opacity:1}
+
+/* Cohort Rank — live, and deliberately printed with its denominator. */
+#r-rank:empty{display:none}
+.rankbox{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 0 22px;
+  padding:16px 20px;border:1px solid var(--rule);background:var(--card)}
+.rankbox .rk{font-family:var(--f-disp);font-size:34px;font-weight:700;line-height:1;
+  letter-spacing:-.02em;color:var(--navy)}
+.rankbox .rk small{font-size:16px;font-weight:500;color:var(--ink-2);margin-left:5px}
+.rankbox .rlab{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3)}
+.rankbox .rnote{font-size:13px;color:var(--ink-2);line-height:1.55;flex:1 1 260px;min-width:0}
 </style>
 </head>
 <body>
@@ -595,6 +606,7 @@ section.blk:last-of-type{border-bottom:0}
   </div></div>
   <div class="wrap">
     <div id="r-banner"></div>
+    <div id="r-rank"></div>
 
     <section class="blk">
       <div class="blkhead"><h3>Where the forty minutes went</h3>
@@ -1233,7 +1245,7 @@ const REASON = {
     'the session — ask them to repeat it.',
   not_ready: 'This paper has not been released yet.',
   not_open: 'This paper was never unlocked for you, so the attempt cannot be recorded. ' +
-    'Tell your centre before you leave, and download your data below.',
+    'Tell your centre before you leave.',
   no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
   no_attempt: 'There is no completed attempt to review for this paper.',
   no_report: 'That attempt was recorded before the review feature existed, so the full report ' +
@@ -1305,6 +1317,7 @@ async function doReview(pin) {
       '<a href="../">&larr; Back to Quest Summit</a></div></div>');
     render(j.report);
     show('res');
+    applyRank();                      // rank has moved since they sat it
     const rt = $('#retry'); if (rt) rt.style.display = 'none';
     const b = $('#r-banner');
     if (b) b.innerHTML = '<div class="banner">This is the report from the attempt you have ' +
@@ -2308,7 +2321,8 @@ function drawTable(A) {
   const T = $('#qtable'); T.innerHTML = '';
   const thead = el('thead');
   const hr = el('tr');
-  ['#', 'ID', 'Sub-topic', 'R', 'Type', 'Outcome', 'Your time', 'Bench', 'Peer', 'Visits', ''].forEach((h, i) => {
+  ['#', 'ID', 'Sub-topic', 'R', 'Type', 'Outcome', 'Your time', 'Bench', 'Peer', 'Solved in',
+   'Visits', ''].forEach((h, i) => {
     const th = el('th', i >= 6 && i <= 9 ? 'r' : '', h); hr.appendChild(th);
   });
   thead.appendChild(hr); T.appendChild(thead);
@@ -2330,13 +2344,14 @@ function drawTable(A) {
     tr.appendChild(el('td', 'num r', p.t ? human(p.t) : '—'));
     tr.appendChild(el('td', 'num r', p.bench + 's'));
     tr.appendChild(el('td', 'num r peer-' + p.n, '—'));
+    tr.appendChild(el('td', 'num r pcor-' + p.n, '—'));
     tr.appendChild(el('td', 'num r', p.visits || '—'));
     const last = el('td');
     const b = el('button', 'exp', 'method');
     last.appendChild(b); tr.appendChild(last);
     tb.appendChild(tr);
     const mr = el('tr', 'mrow');
-    const mtd = el('td'); mtd.colSpan = 11;
+    const mtd = el('td'); mtd.colSpan = 12;
     const mv = el('div', 'meth');
     const ka = el('b'); ka.innerHTML = 'Answer: ' + MATH(p.key) + '.  ';
     ka.style.color = 'var(--ok)';
@@ -2353,7 +2368,8 @@ function drawTable(A) {
   $('#peernote').innerHTML = 'The <b>Peer</b> column fills in with the batch median once ' +
     CONFIG.PEER_MIN + ' students have sat this paper. Until then the <b>Bench</b> column is your ' +
     'comparison: a modelled pace target derived from the question\'s difficulty rating, not from ' +
-    'real attempts.';
+    'real attempts. <b>Solved in</b> is the median time of the students who got that question ' +
+    'right.';
 }
 
 /* ---------------- backend ---------------- */
@@ -2366,6 +2382,10 @@ function payload(A) {
     wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
     q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
       a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls,
+      /* f: 0 none, 1 come back to this, 2 leave this one. r and b are the authored
+         difficulty and pace benchmark — carried so the backend can blend its observed
+         estimates toward them without holding a copy of the question bank. */
+      f: p.marked || 0, r: p.rate, b: p.bench,
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
@@ -2452,6 +2472,7 @@ async function postPayload(manual) {
             ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
           (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
             ' now sat this paper.' : '') + '</div>';
+        applyRank();                               // its own call — see the note there
         if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
         $('#retry').style.display = 'none';
         return;
@@ -2461,8 +2482,8 @@ async function postPayload(manual) {
          change the answer, so stop. */
       lastReason = REASON[j && j.reason] || (j && j.reason) || 'unknown reason';
       B.innerHTML = '<div class="banner err">IMS did not accept this attempt (' +
-        lastReason + ') Your result below is complete. Download your data and send it ' +
-        'to your centre.</div>';
+        lastReason + ') Your result below is complete, but it has not been recorded. ' +
+        'Tell your centre before you leave.</div>';
       $('#retry').style.display = '';
       return;
 
@@ -2482,16 +2503,44 @@ async function postPayload(manual) {
   B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
     'is <b>saved on this computer</b> and will be sent automatically the next time this ' +
     'paper is opened here. Your result below is complete and correct. You can also press ' +
-    '<b>Retry</b> now, or download your data and send it to your centre.</div>';
+    '<b>Retry</b> now.</div>';
   $('#retry').style.display = '';
 }
 $('#retry').onclick = () => { if (lastPayload) postPayload(true); };
+
+/* Rank comes from its own uncached call, never from the peer blob: that blob is filled
+   before this attempt is written, so during a big simultaneous sitting it would rank a
+   student against a cohort that does not include them. Ties share a rank. */
+async function applyRank() {
+  if (!CONFIG.ENDPOINT) return;
+  let j;
+  try {
+    const r = await fetch(api('action=rank&pin=' + encodeURIComponent(S.pin) +
+      '&paper=' + encodeURIComponent(CONFIG.PAPER_ID)));
+    j = await r.json();
+  } catch (e) { return; }                       // a missing rank is not worth an error
+  if (!j || !j.ok || !j.of) return;
+  const rank = j.rank;
+  $('#r-rank').innerHTML =
+    '<div class="rankbox">' +
+      '<div><div class="rlab">Cohort Rank</div>' +
+        '<div class="rk">' + rank + '<small>of ' + j.of + '</small></div></div>' +
+      '<p class="rnote">Across everyone who has sat this paper so far. It will move as more ' +
+      'students sit it &mdash; the field grows, your paper does not change.</p>' +
+    '</div>';
+}
 
 function applyPeer(j, A) {
   j.peer.forEach(p => {
     const c = document.querySelector('.peer-' + p.n);
     if (c) { c.textContent = human(p.med);
       c.title = Math.round(p.pc * 100) + '% of the batch got this right'; }
+    /* What the question actually costs someone who cracks it — the comparison that
+       matters, since a median over everybody is dragged up by those who never got there. */
+    const d = document.querySelector('.pcor-' + p.n);
+    if (d && p.nCor) { d.textContent = human(p.medCor);
+      d.title = p.nCor + ' student' + (p.nCor === 1 ? '' : 's') + ' answered this correctly; ' +
+        Math.round(p.acc * 100) + '% of those who attempted it got it right'; }
   });
   $('#peernote').innerHTML = 'The <b>Peer</b> column is the batch median time on that question, ' +
     'across <b>' + j.n + '</b> attempts. Hover a value for the batch accuracy on that question.' +
