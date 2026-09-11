@@ -201,9 +201,15 @@ function render(pin, j) {
          the paper, so a student who has not re-opened their report still sees it change. */
       const rk = (p.rank && p.of)
         ? '<span class="rank">Cohort Rank <b>' + p.rank + '</b> of ' + p.of + '</span>' : '';
+      /* Triage appears only once faculty has published it for the paper. */
+      const t = p.triage;
+      const band = !t ? '' : t.score >= 80 ? 'Sharp' : t.score >= 65 ? 'Solid'
+                 : t.score >= 50 ? 'Leaky' : 'Costly';
+      const tri = t ? '<span class="rank">Triage <b>' + t.score + '</b> / 100 · ' + band +
+        '</span>' : '';
       meta = 'Scored <b>' + p.score + '</b>' +
              (d ? ' on ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '') +
-             ' · you cannot sit this paper again' + rk;
+             ' · you cannot sit this paper again' + rk + tri;
       act = '<button class="btn btn-ghost" data-go="' + p.href + '" data-review="1">Review</button>';
     } else if (p.state === 'soon') {
       meta = 'Not released yet';

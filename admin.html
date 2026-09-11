@@ -209,6 +209,19 @@ async function loadSessions(){
           'data-ready="' + p.id + '" data-on="1">Make this paper live</button>') +
         (p.ready ? '<button class="btn-g btn" style="margin-top:7px;width:100%;opacity:.65" ' +
           'data-ready="' + p.id + '" data-on="0">Return to &ldquo;coming soon&rdquo;</button>' : '') +
+        /* Triage is locked, not live: students see nothing until this is pressed. Press it
+           once the last batch has sat — pressing it again re-cuts everyone against the
+           fuller cohort. */
+        (p.sat ? '<div class="pcline"><div class="pclab">Triage</div>' +
+          '<div class="s" style="margin:0 0 8px">' +
+            (p.published
+              ? p.published + ' of ' + p.sat + ' published' +
+                (p.triage_at ? ' &middot; ' + new Date(p.triage_at)
+                  .toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}) : '')
+              : 'not published &mdash; students see nothing yet') + '</div>' +
+          '<button class="btn-g btn" style="width:100%" data-triage="' + p.id + '" ' +
+            'data-sat="' + p.sat + '">' +
+            (p.published ? 'Re-publish triage' : 'Publish triage') + '</button></div>' : '') +
         /* The passcode faculty reads out, and the box to rotate it between batches. */
         '<div class="pcline">' +
           '<div class="pclab">Passcode</div>' +
@@ -238,6 +251,32 @@ document.addEventListener('click', async e => {
     const j = await r.json();
     if(!j.ok) msg('Could not change that paper: '+(j.reason||'unknown'),'err');
   }catch(err){ msg('Could not reach the server to change that paper.','err'); }
+  loadSessions();
+});
+
+/* Publish triage for a paper. Recomputes every attempt against the cohort as it stands,
+   then locks it into each student's row. Safe to run more than once. */
+document.addEventListener('click', async e => {
+  const b = e.target.closest('#sessions button[data-triage]');
+  if(!b) return;
+  const paper = b.getAttribute('data-triage');
+  const sat = Number(b.getAttribute('data-sat')) || 0;
+  if(!confirm('Publish triage for ' + paper + '?\n\n' + sat + ' attempt'
+      + (sat === 1 ? '' : 's') + ' will be scored against each other and locked.\n\n'
+      + 'Students see their triage report from this moment. Run it once the last batch has '
+      + 'sat — running it again re-cuts everyone against the fuller cohort.')) return;
+  b.disabled = true; b.textContent = 'Publishing…';
+  try{
+    const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=triage_publish&key=' +
+      encodeURIComponent(SS.key);
+    const r = await fetch(u, { method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ paper }) });
+    const j = await r.json();
+    if(!j.ok) msg('Could not publish triage: '+(j.reason||'unknown'),'err');
+    else msg('Triage published for ' + j.paper + ' — ' + j.published + ' attempt'
+      + (j.published === 1 ? '' : 's') + ' scored and locked.','ok');
+  }catch(err){ msg('Could not reach the server to publish triage.','err'); }
   loadSessions();
 });
 
