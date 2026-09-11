@@ -358,6 +358,26 @@ section.blk:last-of-type{border-bottom:0}
 #calcbtn.live{background:var(--navy);color:#fff;border-color:var(--navy)}
 @media (max-width:520px){ #calc{width:calc(100vw - 24px);max-width:290px} }
 
+
+/* ---- TITA on-screen keypad. The physical keyboard is deliberately dead here. ---- */
+.titabox input[readonly]{cursor:pointer;background:var(--card)}
+.titabox input[readonly]:hover{border-color:var(--navy)}
+.vkey{display:grid;grid-template-columns:repeat(3,74px);gap:9px;margin-top:16px}
+.vk{height:54px;border:1.5px solid var(--rule);background:var(--card);color:var(--ink);
+  font-family:var(--f-mono);font-size:20px;font-weight:600;cursor:pointer;
+  transition:background .1s,border-color .1s}
+.vk:hover{border-color:var(--navy);background:var(--paper-2)}
+.vk:active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.vk-fn{font-size:13px;font-family:inherit;font-weight:600;letter-spacing:.02em}
+/* ---- two-pass flags ---- */
+.pb.leave{background:var(--ink-3);color:#fff;border-color:var(--ink-3)}
+.pb.ansleave{background:var(--ink-3);color:#fff;border-color:var(--navy);
+  box-shadow:inset 0 0 0 2px var(--navy)}
+.btn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.homelink{display:inline-block;font-family:var(--f-mono);font-size:12px;letter-spacing:.04em;
+  color:inherit;opacity:.72;text-decoration:none;border-bottom:1px solid currentColor;
+  padding-bottom:2px;margin-bottom:16px}
+.homelink:hover{opacity:1}
 </style>
 </head>
 <body>
@@ -368,6 +388,7 @@ section.blk:last-of-type{border-bottom:0}
     <div class="gateleft">
       <div class="gate-brand">IMS</div>
       <div class="gate-tag">Trusted for Success</div>
+      <a class="homelink" href="../">&larr; All papers</a>
       <h1>Most Expected<br>CAT 2026<br><em>Arithmetic</em></h1>
       <p class="gate-sub">Twenty-two questions built against the CAT 2022&ndash;2025 papers only.
         Forty minutes. The paper is deliberately longer than the clock &mdash; what it measures is
@@ -427,11 +448,16 @@ section.blk:last-of-type{border-bottom:0}
       <div class="rulerow"><dt>Questions</dt><dd><b>22</b>, shown one at a time. You may move between them
         freely using the palette on the right, in any order, as often as you like.</dd></div>
       <div class="rulerow"><dt>Marking</dt><dd>Multiple choice: <b>+3</b> correct, <b>&minus;1</b> wrong.
-        TITA questions carry <b>no negative marking</b> &mdash; every TITA answer is a whole number, so
-        enter digits only.</dd></div>
-      <div class="rulerow"><dt>Navigation</dt><dd><b>Save &amp; Next</b> records your answer and moves on.
-        <b>Mark for Review</b> flags a question you intend to return to; a marked question is still
-        graded if it carries an answer. <b>Clear Response</b> empties it.</dd></div>
+        TITA questions carry <b>no negative marking</b> &mdash; every TITA answer is a whole number.
+        Tap the answer box to open the on-screen keypad; the physical keyboard does not type into
+        it.</dd></div>
+      <div class="rulerow"><dt>The two passes</dt><dd>Go once from Q1 to Q22 and solve only what you
+        are certain of. For everything else, say which it is: <b>Come back to this</b> for a question
+        you will return to on the second pass, <b>Leave this one</b> for a question you are done with.
+        Both still count as answered if you have entered something. <b>Clear Response</b> empties
+        it.</dd></div>
+      <div class="rulerow"><dt>Once you begin</dt><dd>The paper takes over the screen and the browser
+        Back button stops working until you submit. Leaving the page still ends the attempt.</dd></div>
       <div class="rulerow"><dt>If it crashes</dt><dd>Your answers are saved on this computer every
         few seconds. If the browser or the machine dies, open this page again <b>on the same
         computer</b> and it will offer to put you back exactly where you were. The clock keeps
@@ -515,7 +541,8 @@ section.blk:last-of-type{border-bottom:0}
   <div class="qactions"><div class="inner">
     <button class="btn btn-ghost" id="calcbtn">Calculator</button>
     <button class="btn btn-ghost" id="a-clear">Clear response</button>
-    <button class="btn btn-ghost" id="a-mark">Mark for review &amp; next</button>
+    <button class="btn btn-ghost" id="a-come">Come back to this</button>
+    <button class="btn btn-ghost" id="a-leave">Leave this one</button>
     <span class="sp"></span>
     <button class="btn btn-ghost" id="a-prev">&larr; Previous</button>
     <button class="btn" id="a-next">Save &amp; next &rarr;</button>
@@ -560,6 +587,7 @@ section.blk:last-of-type{border-bottom:0}
 <!-- ============ RESULTS ============ -->
 <div id="res" class="screen">
   <div class="rhero"><div class="wrap">
+    <a class="homelink" href="../">&larr; All papers</a>
     <div class="eyebrow">Attempt report</div>
     <h2 id="r-title">Arithmetic Sectional</h2>
     <div class="sub" id="r-sub"></div>
@@ -597,7 +625,6 @@ section.blk:last-of-type{border-bottom:0}
     </section>
 
     <div class="actionbar">
-      <button class="btn btn-ghost" id="dl">Download my attempt data</button>
       <button class="btn btn-ghost" id="retry" style="display:none">Retry sending to IMS</button>
     </div>
     <div class="footer" id="rfoot"></div>
@@ -1004,7 +1031,7 @@ const PINS = ["1f2f73ca7c01b218", "e4306ab02ea04124", "edd45a5f8e958b67", "4cc08
 const S = {
   pin: "", name: "", batch: "", centre: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
   ans: Array(N).fill(null),      // option index 1..4 | string | null
-  marked: Array(N).fill(false),
+  marked: Array(N).fill(0),
   seen: Array(N).fill(false),
   ev: [],                        // {t, type, q, v}
   enterT: 0,
@@ -1157,7 +1184,9 @@ function resumeAttempt(p) {
   S.pending = false;
   S.startedAt = p.startedAt; S.t0 = p.t0; S.ended = false; S.autoSub = false;
   S.ans = p.ans.slice();
-  S.marked = Array.isArray(p.marked) && p.marked.length === N ? p.marked.slice() : Array(N).fill(false);
+  S.marked = Array.isArray(p.marked) && p.marked.length === N
+    ? p.marked.map(v => v === true ? 1 : (Number(v) || 0))   // older saves stored booleans
+    : Array(N).fill(0);
   S.seen = Array.isArray(p.seen) && p.seen.length === N ? p.seen.slice() : Array(N).fill(false);
   S.ev = Array.isArray(p.ev) ? p.ev.slice() : [];
   S.resumes = (p.resumes || 0) + 1;
@@ -1277,7 +1306,6 @@ async function doReview(pin) {
     render(j.report);
     show('res');
     const rt = $('#retry'); if (rt) rt.style.display = 'none';
-    const dl = $('#dl'); if (dl) dl.style.display = 'none';
     const b = $('#r-banner');
     if (b) b.innerHTML = '<div class="banner">This is the report from the attempt you have ' +
       'already submitted. Nothing here is being re-recorded.</div>';
@@ -1468,10 +1496,28 @@ function runTest(at) {
   timerId = setInterval(tick, 250);
   if (saveTimer) clearInterval(saveTimer);
   saveTimer = setInterval(saveProgress, CONFIG.SAVE_EVERY * 1000);
+  lockNav();
   window.addEventListener('beforeunload', beforeUnload);
   window.addEventListener('pagehide', saveProgress);      // catches the tab being closed
   document.addEventListener('visibilitychange', onHide);
   saveProgress();
+}
+/* Once the paper is live the player is the only thing on screen. Back is made inert by
+   keeping a spare history entry in front of the page and re-pushing it on every popstate;
+   fullscreen is requested off the Begin click, which is a real user gesture. Neither of
+   these can stop a new tab or Cmd-Tab — no web page can — so both exits are logged and
+   reported instead. */
+function lockNav() {
+  try { history.pushState(null, '', location.href); } catch (e) {}
+  window.addEventListener('popstate', onPop);
+  const r = document.documentElement;
+  const go = r.requestFullscreen || r.webkitRequestFullscreen;
+  if (go) { try { go.call(r); } catch (e) {} }
+}
+function onPop() {
+  if (S.ended) return;                       // after submission Back behaves normally again
+  log('navback', S.cur);
+  try { history.pushState(null, '', location.href); } catch (e) {}
 }
 function onHide() { if (document.visibilityState === 'hidden') saveProgress(); }
 function beforeUnload(e) { if (!S.ended) { e.preventDefault(); e.returnValue = ''; } }
@@ -1503,13 +1549,18 @@ function paint() {
   for (let i = 0; i < N; i++) {
     const b = gs[i]; b.className = 'pb';
     const has = S.ans[i] !== null && S.ans[i] !== '';
-    if (S.marked[i]) b.classList.add(has ? 'ansmark' : 'mark');
+    const f = S.marked[i];
+    if (f === 1) b.classList.add(has ? 'ansmark' : 'mark');
+    else if (f === 2) b.classList.add(has ? 'ansleave' : 'leave');
     else if (has) b.classList.add('ans');
     else if (S.seen[i]) b.classList.add('seen');
     if (i === S.cur) b.classList.add('cur');
-    if (has) a++; if (S.marked[i]) m++; if (!S.seen[i]) nv++;
+    if (has) a++; if (f === 1) m++; if (!S.seen[i]) nv++;
   }
   $('#s-ans').textContent = a; $('#s-mark').textContent = m; $('#s-nv').textContent = nv;
+  const cb = $('#a-come'), lv = $('#a-leave');
+  if (cb) cb.classList.toggle('on', S.marked[S.cur] === 1);
+  if (lv) lv.classList.toggle('on', S.marked[S.cur] === 2);
 }
 
 /* ---------------- question rendering ---------------- */
@@ -1540,21 +1591,44 @@ function goTo(i, first) {
   } else {
     const w = el('div', 'titabox');
     const inp = el('input');
-    inp.type = 'text'; inp.inputMode = 'numeric'; inp.autocomplete = 'off';
-    inp.placeholder = 'Whole number';
+    inp.type = 'text'; inp.readOnly = true; inp.inputMode = 'none';
+    inp.autocomplete = 'off'; inp.spellcheck = false;
+    inp.placeholder = 'Tap here to enter your answer';
     inp.value = S.ans[S.cur] === null ? '' : S.ans[S.cur];
-    inp.oninput = () => {
-      inp.value = inp.value.replace(/[^0-9-]/g, '');
-      S.ans[S.cur] = inp.value === '' ? null : inp.value;
-      log('type', S.cur, inp.value); paint(); saveProgress();
-    };
+    const pad = buildKeypad(inp);
+    inp.onclick = () => { pad.hidden = !pad.hidden; };
     w.appendChild(inp);
-    w.appendChild(el('p', 'titanote', 'Digits only. No units, no commas, no decimal point.'));
+    w.appendChild(el('p', 'titanote',
+      'Digits only. Use the on-screen keypad \u2014 the physical keyboard does not type here.'));
+    w.appendChild(pad);
     body.appendChild(w);
-    setTimeout(() => inp.focus(), 30);
   }
   paint();
   saveProgress();
+}
+/* The answer box is read-only, so every digit arrives through here. */
+function setTita(inp, v) {
+  v = String(v).replace(/[^0-9]/g, '').slice(0, 9);
+  inp.value = v;
+  S.ans[S.cur] = v === '' ? null : v;
+  log('type', S.cur, v); paint(); saveProgress();
+}
+function buildKeypad(inp) {
+  const pad = el('div', 'vkey'); pad.hidden = true;
+  ['7','8','9','4','5','6','1','2','3','0','back','clear'].forEach(k => {
+    const fn = (k === 'back' || k === 'clear');
+    const b = el('button', 'vk' + (fn ? ' vk-fn' : ''));
+    b.type = 'button';
+    b.textContent = k === 'back' ? '\u232B' : k === 'clear' ? 'Clear' : k;
+    b.onclick = ev => {
+      ev.stopPropagation();
+      if (k === 'back') setTita(inp, inp.value.slice(0, -1));
+      else if (k === 'clear') setTita(inp, '');
+      else setTita(inp, inp.value + k);
+    };
+    pad.appendChild(b);
+  });
+  return pad;
 }
 function pick(k) {
   S.ans[S.cur] = k; log('select', S.cur, k);
@@ -1565,12 +1639,19 @@ function pick(k) {
 $('#a-next').onclick = () => { if (S.cur < N - 1) goTo(S.cur + 1); else goTo(0); };
 $('#a-prev').onclick = () => goTo(S.cur > 0 ? S.cur - 1 : N - 1);
 $('#a-clear').onclick = () => { S.ans[S.cur] = null; log('clear', S.cur); goTo(S.cur, false); };
-$('#a-mark').onclick = () => {
-  S.marked[S.cur] = !S.marked[S.cur];
-  log(S.marked[S.cur] ? 'mark' : 'unmark', S.cur);
-  if (S.marked[S.cur] && S.cur < N - 1) goTo(S.cur + 1); else paint();
+/* Two-pass method: on the single Q1->Q22 pass every question you do not solve outright is
+   either one you will return to, or one you are done with. Recording which is which is what
+   makes the triage analysis readable — a single "marked" flag meant opposite things for a
+   strong and a weak candidate. */
+function flag(v) {
+  S.marked[S.cur] = (S.marked[S.cur] === v) ? 0 : v;
+  const f = S.marked[S.cur];
+  log(f === 1 ? 'come' : f === 2 ? 'leave' : 'unflag', S.cur);
+  if (f && S.cur < N - 1) goTo(S.cur + 1); else paint();
   saveProgress();
-};
+}
+$('#a-come').onclick = () => flag(1);
+$('#a-leave').onclick = () => flag(2);
 $('#submitbtn').onclick = () => {
   const unans = S.ans.filter(a => a === null || a === '').length;
   if (confirm('Submit the paper?\n\n' + (N - unans) + ' answered, ' + unans +
@@ -1587,7 +1668,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter') { $('#a-next').click(); e.preventDefault(); }
   else if (e.key === 'ArrowRight') { $('#a-next').click(); e.preventDefault(); }
   else if (e.key === 'ArrowLeft') { $('#a-prev').click(); e.preventDefault(); }
-  else if (e.key.toLowerCase() === 'm') { $('#a-mark').click(); e.preventDefault(); }
+  else if (e.key.toLowerCase() === 'm') { $('#a-come').click(); e.preventDefault(); }
+  else if (e.key.toLowerCase() === 'l') { $('#a-leave').click(); e.preventDefault(); }
 });
 
 /* ---------------- on-screen calculator ----------------
@@ -1980,7 +2062,10 @@ function analyse(g, segs) {
     wasted, cheap, couldBuy, rho, hardEarly, flips, flipHurt,
     used: Math.min(S.endT, CONFIG.DURATION), auto: S.autoSub,
     gap: Math.min(S.gap, CONFIG.DURATION), resumes: S.resumes,
-    maxScore: N * 3, benchTotal: QS.reduce((a, q) => a + q.bench, 0) };
+    maxScore: N * 3, benchTotal: QS.reduce((a, q) => a + q.bench, 0),
+    /* Stored so a later review can redraw the ribbon. It used to be rebuilt from the
+       in-memory event log, which is empty on a fresh page, so review showed a blank bar. */
+    segs };
 }
 
 /* ---------------- palette for outcomes ---------------- */
@@ -2022,7 +2107,7 @@ function render(A) {
   });
 
   /* ribbon */
-  const segs = timeline();
+  const segs = (A.segs && A.segs.length) ? A.segs : timeline();
   const bar = $('#ribbar'); bar.innerHTML = '';
   const total = CONFIG.DURATION;                    // the ribbon is always the full 40 minutes
   segs.forEach(s => {
@@ -2420,13 +2505,6 @@ flushParked();
 /* An attempt left unfinished on this machine — a crash, a reboot, a closed tab. */
 offerResume();
 
-$('#dl').onclick = () => {
-  const blob = new Blob([JSON.stringify(lastPayload || {}, null, 1)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'IMS_' + CONFIG.PAPER_ID + '_' + S.pin + '.json';
-  a.click(); URL.revokeObjectURL(a.href);
-};
 </script>
 </body>
 </html>
