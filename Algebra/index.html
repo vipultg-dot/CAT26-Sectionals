@@ -8,6 +8,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* The hidden attribute hides via the browser's own [hidden]{display:none}, which ANY
+   author rule setting display outranks. #startrow carries .startrow{display:flex} and
+   was therefore visible while marked hidden, exposing Begin before the passcode. This
+   rule makes hidden mean hidden for every element, whatever else sets display. */
+[hidden]{display:none !important}
 :root{
   --paper:#FAF8F4; --paper-2:#F2EEE6; --card:#FFFFFF;
   --ink:#14203A; --ink-2:#4A5568; --ink-3:#8A8578;
@@ -1439,6 +1444,16 @@ $('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin();
 
 /* ---------------- start ---------------- */
 $('#begin').onclick = () => {
+  /* Second lock, independent of CSS. The server refuses a submission with no `opens`
+     row, so a bypassed sitting could never be recorded — but the student would lose the
+     full 40 minutes discovering that. Refuse the start instead. */
+  if (!unlocked) {
+    $('#startrow').hidden = true;
+    pcWarn('Enter the passcode your faculty read out, then press Unlock paper. The test ' +
+      'cannot be started before that.');
+    $('#passcode').focus();
+    return;
+  }
   S.startedAt = now(); S.t0 = now(); S.ended = false;
   S.gap = 0; S.resumes = 0;
   clearProgress();                  // a fresh sitting supersedes anything left on this machine
