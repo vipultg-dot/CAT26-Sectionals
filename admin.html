@@ -95,6 +95,13 @@ tr.prac td{opacity:.5}
 .empty{padding:40px 0;color:var(--ink-3);font-size:14px}
 .foot{padding:40px 0 60px;font-size:12px;color:var(--ink-3);line-height:1.6}
 @media(max-width:820px){.row{grid-template-columns:1fr}}
+
+.calflag{display:inline-block;font-family:var(--f-mono,ui-monospace,monospace);font-size:9.5px;
+  letter-spacing:.06em;padding:2px 6px;border:1px solid #E5B5B5;background:#FBF0EF;color:#6E1B1B;
+  margin:2px 4px 2px 0;white-space:nowrap}
+.calflag.warn{border-color:#E6C7A6;background:#FBEEE2;color:#8A4B10}
+.drift.up{color:#6E1B1B;font-weight:700}
+.drift.dn{color:#1B5E3F;font-weight:700}
 </style>
 </head>
 <body>
@@ -141,6 +148,20 @@ tr.prac td{opacity:.5}
     </div>
 
     <div class="tiles" id="tiles"></div>
+
+    <h2 class="sec">Item calibration <small>what the students' data says about each question</small></h2>
+    <p class="s" style="max-width:78ch;margin:0 0 14px">Difficulty is measured, not declared:
+      <b>Observed</b> is what the cohort's accuracy and solving time actually imply, on the same
+      4&ndash;8 scale the paper was authored on. <b>Drift</b> is how far the authored guess was out.
+      <b>Disc</b> is discrimination &mdash; whether the question separates strong candidates from
+      weak ones. A question near zero discrimination is dead weight however hard it looks; a
+      negative one usually means the key is wrong.</p>
+    <div class="bar" style="margin-bottom:14px">
+      <button class="btn" id="calload">Load item calibration</button>
+      <div class="sp"></div>
+      <button class="btn-g btn" id="calcsv">Download calibration CSV</button>
+    </div>
+    <div id="calwrap"></div>
 
     <h2 class="sec">Attempts <small id="acount"></small></h2>
     <div id="tblwrap"></div>
@@ -460,6 +481,69 @@ function render(){
 }
 
 /* ---------------- CSV ---------------- */
+let CAL = null;
+async function loadCalibration(){
+  const paper = $('#paper').value;
+  if(!paper || paper === 'all'){ msg('Pick a single paper first — calibration is per paper.','err'); return; }
+  const b = $('#calload'); b.disabled = true; b.textContent = 'Loading…';
+  try{
+    const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=calibration&key=' +
+      encodeURIComponent(SS.key) + '&paper=' + encodeURIComponent(paper);
+    const j = await (await fetch(u)).json();
+    if(!j.ok){ msg('Could not load calibration: '+(j.reason==='no_attempts'
+      ? 'nobody has sat this paper yet' : (j.reason||'unknown')),'err');
+      $('#calwrap').innerHTML=''; CAL=null; return; }
+    CAL = j;
+    renderCalibration(j);
+    hide();
+  }catch(e){ msg('Could not reach the server for calibration.','err'); }
+  finally{ b.disabled = false; b.textContent = 'Load item calibration'; }
+}
+
+function renderCalibration(j){
+  const head = ['#','Type','Attempted','Correct','Accuracy','Median (all)','Median (correct)',
+                'Authored','Observed','Drift','Disc','Left alone','Flags'];
+  let out = '<p class="s" style="margin:0 0 10px"><b>'+j.n+'</b> attempt'+(j.n===1?'':'s')+
+    ' &middot; authored mean <b>'+(j.meanAuthored==null?'—':j.meanAuthored)+
+    '</b> &middot; observed mean <b>'+j.meanObserved+'</b>'+
+    (j.meanDrift==null?'':' &middot; mean drift <b>'+(j.meanDrift>0?'+':'')+j.meanDrift+'</b>')+
+    (j.n < 30 ? ' &middot; <em>thin sample — treat as indicative</em>' : '')+'</p>';
+  out += '<div style="overflow-x:auto"><table><thead><tr>' +
+    head.map(x=>'<th>'+h(x)+'</th>').join('') + '</tr></thead><tbody>';
+  j.items.forEach(i => {
+    const d = i.drift;
+    const dc = d == null ? '' : d > 0 ? 'drift up' : d < 0 ? 'drift dn' : '';
+    out += '<tr>' +
+      '<td class="num">'+i.n+'</td>' +
+      '<td>'+h(i.type||'—')+'</td>' +
+      '<td class="num">'+i.attempted+'</td>' +
+      '<td class="num">'+i.correct+'</td>' +
+      '<td class="num">'+Math.round(i.acc*100)+'%</td>' +
+      '<td class="num">'+(i.medAll?mmss(i.medAll):'—')+'</td>' +
+      '<td class="num">'+(i.medCor?mmss(i.medCor):'—')+'</td>' +
+      '<td class="num">'+(i.authored==null?'—':i.authored)+'</td>' +
+      '<td class="num"><b>'+i.observed+'</b></td>' +
+      '<td class="num '+dc+'">'+(d==null?'—':(d>0?'+':'')+d)+'</td>' +
+      '<td class="num">'+(i.disc==null?'—':i.disc.toFixed(2))+'</td>' +
+      '<td class="num">'+i.leftAlone+'</td>' +
+      '<td>'+i.flags.map(f=>'<span class="calflag'+
+        (f==='MISRATED'||f==='OPTIONS MAY BE CARRYING IT'?' warn':'')+'">'+h(f)+'</span>').join('')+'</td>' +
+      '</tr>';
+  });
+  $('#calwrap').innerHTML = out + '</tbody></table></div>';
+}
+
+$('#calload').onclick = loadCalibration;
+$('#calcsv').onclick = () => {
+  if(!CAL){ msg('Load the calibration first.','err'); return; }
+  dl('calibration_'+CAL.paper+'.csv', [
+    ['question','type','attempted','correct','accuracy','median_all_s','median_correct_s',
+     'authored_rate','observed_rate','drift','discrimination','left_alone','came_back','flags'],
+    ...CAL.items.map(i => [i.n, i.type||'', i.attempted, i.correct, i.acc, i.medAll, i.medCor,
+      i.authored==null?'':i.authored, i.observed, i.drift==null?'':i.drift,
+      i.disc==null?'':i.disc, i.leftAlone, i.cameBack, i.flags.join(' | ')])]);
+};
+
 function dl(name, rows){
   const esc = v => { v = v===null||v===undefined ? '' : String(v);
     return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
