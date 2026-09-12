@@ -2458,7 +2458,7 @@ function payload(A) {
       /* f: 0 none, 1 come back to this, 2 leave this one. r and b are the authored
          difficulty and pace benchmark — carried so the backend can blend its observed
          estimates toward them without holding a copy of the question bank. */
-      f: p.marked || 0, r: p.rate, b: p.bench,
+      f: p.marked || 0, r: p.rate, b: p.bench, ty: (QS[p.n - 1] || {}).type,
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
