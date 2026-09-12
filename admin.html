@@ -233,16 +233,27 @@ async function loadSessions(){
         /* Triage is locked, not live: students see nothing until this is pressed. Press it
            once the last batch has sat — pressing it again re-cuts everyone against the
            fuller cohort. */
-        (p.sat ? '<div class="pcline"><div class="pclab">Triage</div>' +
-          '<div class="s" style="margin:0 0 8px">' +
-            (p.published
-              ? p.published + ' of ' + p.sat + ' published' +
-                (p.triage_at ? ' &middot; ' + new Date(p.triage_at)
-                  .toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}) : '')
-              : 'not published &mdash; students see nothing yet') + '</div>' +
+        /* Releasing does two things at once: it scores everyone who has already finished,
+           and it opens the Review screen — which carries every answer and worked method.
+           Until it is pressed students see their score and nothing else. */
+        (p.sat ? '<div class="pcline"><div class="pclab">Report</div>' +
+          '<div class="v" style="font-size:15px;color:' +
+            (p.triage_at ? '#1B5E3F' : '#8A5A00') + '">' +
+            (p.triage_at ? 'Released' : 'Not released') + '</div>' +
+          '<div class="s" style="margin:2px 0 8px">' +
+            (p.triage_at
+              ? p.published + ' of ' + p.sat + ' scored &middot; released ' +
+                new Date(p.triage_at).toLocaleString('en-IN',
+                  {day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}) +
+                '<br>Anyone finishing from now on is scored as they submit.'
+              : 'Students see their score only. Review and the answer key are shut.') + '</div>' +
           '<button class="btn-g btn" style="width:100%" data-triage="' + p.id + '" ' +
-            'data-sat="' + p.sat + '">' +
-            (p.published ? 'Re-publish triage' : 'Publish triage') + '</button></div>' : '') +
+            'data-sat="' + p.sat + '" data-rel="1">' +
+            (p.triage_at ? 'Re-cut against the fuller cohort' : 'Release the report') +
+            '</button>' +
+          (p.triage_at ? '<button class="btn-g btn" style="width:100%;margin-top:7px;opacity:.7" ' +
+            'data-triage="' + p.id + '" data-rel="0">Close the report again</button>' : '') +
+          '</div>' : '') +
         /* The passcode faculty reads out, and the box to rotate it between batches. */
         '<div class="pcline">' +
           '<div class="pclab">Passcode</div>' +
@@ -275,29 +286,44 @@ document.addEventListener('click', async e => {
   loadSessions();
 });
 
-/* Publish triage for a paper. Recomputes every attempt against the cohort as it stands,
-   then locks it into each student's row. Safe to run more than once. */
+/* Release (or re-close) a paper's report. Releasing scores everyone already in, opens the
+   gate so later submissions score themselves as they arrive, and unlocks the Review screen
+   — which is the whole answer key, so it is not a button to lean on mid-session. Closing
+   puts it back out of reach without discarding anything already worked out. */
 document.addEventListener('click', async e => {
   const b = e.target.closest('#sessions button[data-triage]');
   if(!b) return;
   const paper = b.getAttribute('data-triage');
   const sat = Number(b.getAttribute('data-sat')) || 0;
-  if(!confirm('Publish triage for ' + paper + '?\n\n' + sat + ' attempt'
-      + (sat === 1 ? '' : 's') + ' will be scored against each other and locked.\n\n'
-      + 'Students see their triage report from this moment. Run it once the last batch has '
-      + 'sat — running it again re-cuts everyone against the fuller cohort.')) return;
-  b.disabled = true; b.textContent = 'Publishing…';
+  const rel = b.getAttribute('data-rel') !== '0';
+  if(rel){
+    if(!confirm('Release the report for ' + paper + '?\n\n'
+      + 'This does two things:\n'
+      + '  1. Scores the ' + sat + ' attempt' + (sat === 1 ? '' : 's') + ' already in, and\n'
+      + '     scores everyone who finishes from now on as they submit.\n'
+      + '  2. OPENS THE REVIEW SCREEN — every question, every answer and every\n'
+      + '     worked method becomes visible to anyone who has submitted.\n\n'
+      + 'Do not press this while students are still sitting the paper.')) return;
+  } else {
+    if(!confirm('Close the report for ' + paper + ' again?\n\n'
+      + 'Review and the answer key go back out of reach immediately. Scores already '
+      + 'worked out are kept, so re-releasing is instant.')) return;
+  }
+  b.disabled = true; b.textContent = rel ? 'Releasing…' : 'Closing…';
   try{
     const u = SS.ep + (SS.ep.includes('?')?'&':'?') + 'action=triage_publish&key=' +
       encodeURIComponent(SS.key);
     const r = await fetch(u, { method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ paper }) });
+      body: JSON.stringify(rel ? { paper } : { paper, release: 0 }) });
     const j = await r.json();
-    if(!j.ok) msg('Could not publish triage: '+(j.reason||'unknown'),'err');
-    else msg('Triage published for ' + j.paper + ' — ' + j.published + ' attempt'
-      + (j.published === 1 ? '' : 's') + ' scored and locked.','ok');
-  }catch(err){ msg('Could not reach the server to publish triage.','err'); }
+    if(!j.ok) msg('Could not change the report: '+(j.reason==='no_attempts'
+      ? 'nobody has sat this paper yet' : (j.reason||'unknown')),'err');
+    else if(j.released === false)
+      msg('Report closed for ' + j.paper + ' — Review and the answer key are shut again.','ok');
+    else msg('Report released for ' + j.paper + ' — ' + j.published + ' attempt'
+      + (j.published === 1 ? '' : 's') + ' scored. Review is now open to them.','ok');
+  }catch(err){ msg('Could not reach the server to change the report.','err'); }
   loadSessions();
 });
 
