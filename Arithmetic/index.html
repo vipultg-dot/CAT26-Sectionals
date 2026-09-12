@@ -408,8 +408,18 @@ section.blk:last-of-type{border-bottom:0}
 .tribar .tn em{font-style:normal;font-weight:400;color:var(--ink-3);font-size:12.5px;
   margin-left:8px}
 .tribar .tv{font-family:var(--f-mono);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
-.tribar .tt{height:9px;background:var(--paper-2);border:1px solid var(--rule);overflow:hidden}
+.tribar .tt{height:13px;background:var(--paper-2);border:1px solid var(--rule);overflow:hidden;
+  display:flex}
 .tribar .tf{height:100%;background:var(--navy)}
+.tribar .tw{height:100%;background:repeating-linear-gradient(45deg,
+  #DCD5C6 0 5px,#C7BEAA 5px 10px)}
+.trikey{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 6px;
+  font-size:12px;color:var(--ink-3)}
+.trikey .sw{width:13px;height:10px;display:inline-block;border:1px solid var(--rule)}
+.trikey .sw-f{background:var(--navy)}
+.trikey .sw-w{background:repeating-linear-gradient(45deg,#DCD5C6 0 5px,#C7BEAA 5px 10px);
+  margin-left:12px}
+.trikey .trirest{margin-left:auto}
 .tribar .td{font-size:12.5px;color:var(--ink-3);margin-top:6px;line-height:1.5}
 .triprov{font-size:12px;color:var(--ink-3);font-style:italic;margin:0 0 26px}
 
@@ -2336,36 +2346,53 @@ function renderTriage(tri) {
   }
   const band = tri.score >= 80 ? 'Sharp' : tri.score >= 65 ? 'Solid'
              : tri.score >= 50 ? 'Leaky' : 'Costly';
-  const d = tri.detail || {};
+  const d = tri.detail || {}, T = tri.clock || 2400;
+  const pc = x => Math.max(0, Math.min(100, (x / T) * 100));
+  const get = k => (tri.buckets || []).find(b => b.key === k) || { spent: 0, credited: 0, n: 0 };
+  const c = get('correct'), w = get('wrong'), l = get('left');
+
   const rows = [
-    ['Conversion', 'the time your correct answers cost', tri.conv,
-      d.nCorrect ? d.nCorrect + ' correct, ' + human(d.spentCorrect) + ' spent against a ' +
-        human(d.benchCorrect) + ' benchmark' : 'nothing was answered correctly'],
-    ['Leakage', 'time spent on answers that were wrong', tri.leak,
-      d.nWrong ? d.nWrong + ' wrong, costing ' + human(d.leakRaw)
-               : 'no marks lost to wrong answers'],
-    ['Decision', 'the questions you skipped, and how fast you let go', tri.dec,
-      d.nSkipped ? d.nSkipped + ' left alone, decided in ' + human(d.decideTime) +
-        ' — and you went after ' + d.coverage + '% of the marks the batch showed were reachable'
-        : 'nothing was read and left'],
+    ['Questions you got right', c,
+      c.n ? c.n + ' correct in ' + human(c.spent) +
+        (d.overpaid ? ', of which ' + human(d.overpaid) + ' was over what the batch needs'
+                    : ', all inside what the batch needs')
+        : 'nothing was answered correctly'],
+    ['Questions you got wrong', w,
+      w.n ? w.n + ' wrong, costing ' + human(w.spent) : 'no marks lost to wrong answers'],
+    ['Questions you left, and the clock you never used', l,
+      (l.n ? l.n + ' read and left in ' + human(d.deciding + d.bled) : 'nothing read and left') +
+      (d.idle ? ' · ' + human(d.idle) + ' never used, ' +
+        (d.forgiven ? d.forgiven + '% of it forgiven because you had gone after ' +
+           tri.coverage + '% of the reachable marks'
+         : 'none of it forgiven — ' + (100 - tri.coverage) +
+           '% of the marks the batch reached were still on the table')
+        : '')],
   ];
+
   box.innerHTML =
     '<div class="trihead">' +
       '<div><div class="triband">' + band + '</div>' +
       '<div class="triscore">' + tri.score + '<small>/100</small></div></div>' +
-      '<p class="trisum">Every second of the paper lands in one of three places: time that ' +
-      'bought marks, time that bought nothing, and time spent deciding not to try. This is ' +
-      'how well those three were managed &mdash; not how much you knew.</p>' +
+      '<p class="trisum">Your forty minutes is an account. Every second went to a question ' +
+      'you got right, a question you got wrong, or a question you decided not to try &mdash; ' +
+      'and the clock you never spent belongs to that last one too. This is the share of it ' +
+      'that bought you something.</p>' +
     '</div>' +
     '<div class="tribars">' + rows.map(r =>
       '<div class="tribar"><div class="tl">' +
-        '<span class="tn">' + r[0] + '<em>' + r[1] + '</em></span>' +
-        '<span class="tv">' + r[2] + '</span></div>' +
-        '<div class="tt"><div class="tf" style="width:' + Math.max(1, r[2]) + '%"></div></div>' +
-        '<div class="td">' + r[3] + '</div></div>').join('') +
+        '<span class="tn">' + r[0] + '</span>' +
+        '<span class="tv">' + human(r[1].spent) + '</span></div>' +
+        '<div class="tt">' +
+          '<div class="tf" style="width:' + pc(r[1].credited) + '%"></div>' +
+          '<div class="tw" style="width:' + pc(r[1].spent - r[1].credited) + '%"></div>' +
+        '</div>' +
+        '<div class="td">' + r[2] + '</div></div>').join('') +
     '</div>' +
-    '<p class="triprov">Scored against ' + (d.used ? human(d.used) + ' of paper time' : 'your paper') +
-    '. The bands are provisional while the first cohorts sit these papers.</p>';
+    '<p class="trikey"><span class="sw sw-f"></span>bought you something' +
+      '<span class="sw sw-w"></span>did not' +
+      '<span class="trirest">bar widths are shares of the full ' +
+      Math.round(T / 60) + ' minutes</span></p>' +
+    '<p class="triprov">The bands are provisional while the first cohorts sit these papers.</p>';
 }
 
 function drawTriage(A) {
@@ -2421,15 +2448,15 @@ function drawTriage(A) {
   });
   box.appendChild(svg);
   let verdict;
-  if (A.rho === null) verdict = 'Too few answers to score triage.';
-  else if (A.rho > .35) verdict = 'Strong. You banked the cheap marks first and met the hard ' +
+  if (A.rho === null) verdict = 'Too few answers to read a sequence from.';
+  else if (A.rho > .35) verdict = 'Strong order. You banked the cheap marks first and met the hard ' +
     'questions late, which is exactly the right shape.';
   else if (A.rho > 0) verdict = 'Mixed. There is a mild upward drift, but several expensive ' +
     'questions were taken on before the cheap ones were finished.';
   else verdict = 'Poor. You went at the hard questions early. On a paper deliberately longer than ' +
     'its clock, that is the single most expensive habit there is.';
   const note = el('p', 'plotnote');
-  note.innerHTML = '<b>Triage: ' + (A.rho === null ? '—' : A.rho.toFixed(2)) + '.</b> ' + verdict +
+  note.innerHTML = '<b>Sequence: ' + (A.rho === null ? '—' : A.rho.toFixed(2)) + '.</b> ' + verdict +
     (A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
       (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '');
   box.appendChild(note);
@@ -2496,6 +2523,9 @@ function payload(A) {
     pin: S.pin, name: S.name, paper: CONFIG.PAPER_ID,
     startedAt: new Date(S.startedAt).toISOString(),
     practice: !!S.practice, auto: A.auto, used: A.used,
+    /* The full paper clock. Triage is scored against this, not against how long the
+       candidate chose to stay — the minutes they left unused are part of the account. */
+    clock: CONFIG.DURATION,
     score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
     wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
     q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
