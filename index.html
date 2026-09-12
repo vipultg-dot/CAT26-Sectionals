@@ -210,7 +210,12 @@ function render(pin, j) {
       meta = 'Scored <b>' + p.score + '</b>' +
              (d ? ' on ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '') +
              ' · you cannot sit this paper again' + rk + tri;
-      act = '<button class="btn btn-ghost" data-go="' + p.href + '" data-review="1">Review</button>';
+      /* Review carries the whole answer key, so the tile matches the backend: shut until
+         faculty releases the paper. */
+      act = p.triageReady
+        ? '<button class="btn btn-ghost" data-go="' + p.href + '" data-review="1">Review</button>'
+        : '<button class="btn btn-ghost" disabled title="Released by your faculty after the '
+          + 'session">Not released yet</button>';
     } else if (p.state === 'soon') {
       meta = 'Not released yet';
       act = '<button class="btn btn-ghost" disabled>Coming soon</button>';
@@ -231,8 +236,9 @@ function render(pin, j) {
 
   $('#foot').textContent =
     'Sat a paper already? Review shows the same report you saw when you finished it — every ' +
-    'question, every second, and where the marks went. Papers cannot be re-sat. Your Cohort ' +
-    'Rank keeps moving as more of the batch sits each paper.';
+    'question, every second, and where the marks went — it opens once your faculty releases ' +
+    'the paper. Papers cannot be re-sat. Your Cohort Rank keeps moving as more of the batch ' +
+    'sits each paper.';
 
   $('#gate').classList.add('off');
   $('#list').classList.remove('off');
