@@ -412,6 +412,16 @@ section.blk:last-of-type{border-bottom:0}
 .tribar .tf{height:100%;background:var(--navy)}
 .tribar .td{font-size:12.5px;color:var(--ink-3);margin-top:6px;line-height:1.5}
 .triprov{font-size:12px;color:var(--ink-3);font-style:italic;margin:0 0 26px}
+
+/* The post-submission screen shows the score and nothing else. */
+#res.scoreonly .blk{display:none}
+#res.scoreonly #r-rank{display:none}
+#res.scoreonly #rfoot{display:none}
+.gatecard{border:1px solid var(--rule);background:var(--card);padding:26px 28px;margin:4px 0 30px}
+.gatecard h3{margin:0 0 10px;font-family:var(--f-disp);font-size:20px;font-weight:600}
+.gatecard p{margin:0 0 20px;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:64ch}
+.gaterow{display:flex;gap:12px;flex-wrap:wrap}
+.gaterow .btn[disabled]{opacity:.45;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -629,6 +639,21 @@ section.blk:last-of-type{border-bottom:0}
   </div></div>
   <div class="wrap">
     <div id="r-banner"></div>
+    <!-- Shown only on the screen a candidate lands on straight after submitting. The
+         report behind Review carries every answer, so it stays shut until faculty
+         releases it for the whole paper. -->
+    <div id="r-gate" hidden>
+      <div class="gatecard">
+        <h3>That is your score. The paper is closed.</h3>
+        <p id="r-gatemsg">Your detailed report &mdash; every question, where the time went and
+          your triage &mdash; is released by your faculty once the batch has finished. It is not
+          available yet.</p>
+        <div class="gaterow">
+          <a class="btn" href="../">Close</a>
+          <button class="btn btn-ghost" id="r-review" disabled>Review &mdash; not released yet</button>
+        </div>
+      </div>
+    </div>
     <div id="r-rank"></div>
 
     <section class="blk">
@@ -1270,6 +1295,8 @@ const REASON = {
   bad_passcode: 'That passcode is not right. It is read out by your faculty at the start of ' +
     'the session — ask them to repeat it.',
   not_ready: 'This paper has not been released yet.',
+  not_released: 'Your report for this paper has not been released by your faculty yet. '
+    + 'Check back after the session.',
   not_open: 'This paper was never unlocked for you, so the attempt cannot be recorded. ' +
     'Tell your centre before you leave.',
   no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
@@ -1342,6 +1369,8 @@ async function doReview(pin) {
       ' &middot; this paper cannot be taken again</span>' +
       '<a href="../">&larr; Back to Quest Summit</a></div></div>');
     render(j.report);
+    $('#res').classList.remove('scoreonly');   // reviewing: the whole report is open
+    $('#r-gate').hidden = true;
     show('res');
     applyRank();                      // rank has moved since they sat it
     renderTriage(j.triage);           // present only once faculty has published it
@@ -1989,6 +2018,9 @@ async function finish() {
       { pin: S.pin, startedAt: S.startedAt, score: A.score }));
   } catch (e) {}
   render(A);
+  /* Straight after submitting, a candidate sees their score and nothing else. */
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = false;
   show('res');
   sendAttempt(A);
 }
@@ -2261,10 +2293,10 @@ function render(A) {
   drawTriage(A);
   drawTable(A);
 
-  $('#rfoot').innerHTML = 'Pace benchmarks are derived from each question\'s difficulty rating ' +
-    'on the IMS 1–10 scale, calibrated against CAT 2022–2025. The 22 benchmarks sum to ' +
-    Math.round(A.benchTotal / 60) + ' minutes against a 40-minute clock, so a complete attempt is ' +
-    'not the target. ' + CONFIG.PAPER_NAME + '.';
+  $('#rfoot').innerHTML = 'Pace benchmarks start from each question\'s authored difficulty and ' +
+    'are corrected by what the batch actually did on it, so they tighten as more students sit ' +
+    'the paper. The 22 benchmarks sum to ' + Math.round(A.benchTotal / 60) + ' minutes against a ' +
+    '40-minute clock, so a complete attempt is not the target. ' + CONFIG.PAPER_NAME + '.';
 }
 
 function tip(ev, p, dur) {
@@ -2279,6 +2311,19 @@ function tip(ev, p, dur) {
 
 /* Triage is published by faculty once the batch has finished, so it is deliberately
    absent until then rather than computed off the first handful of finishers. */
+/* Review stays shut until the paper is released. Nothing here is a security boundary —
+   the backend refuses an unreleased review outright — this only keeps the button honest. */
+function openReviewButton() {
+  const b = $('#r-review');
+  if (!b) return;
+  b.disabled = false;
+  b.textContent = 'Review this paper \u2192';
+  b.onclick = () => { location.href = location.pathname + '?review=1'; };
+  const m = $('#r-gatemsg');
+  if (m) m.textContent = 'Your detailed report has been released \u2014 every question, where ' +
+    'the time went, and your triage.';
+}
+
 function renderTriage(tri) {
   const box = $('#triagepanel');
   if (!box) return;
@@ -2546,7 +2591,10 @@ async function postPayload(manual) {
           (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
             ' now sat this paper.' : '') + '</div>';
         applyRank();                               // its own call — see the note there
-        renderTriage(null);                        // not published at submission time
+        /* If faculty released the paper before this candidate finished, the backend has
+           already scored them on the way in and Review can open immediately. */
+        if (j.triageReady) openReviewButton();
+        renderTriage(null);                        // shown in full behind Review, not here
         if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
         $('#retry').style.display = 'none';
         return;
