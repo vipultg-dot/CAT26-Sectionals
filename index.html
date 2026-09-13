@@ -224,7 +224,13 @@ function render(pin, j) {
                        : '<span class="chip shut">Not open</span>';
       meta = p.openNow ? '22 questions · 40 minutes · passcode required'
                        : 'Opens when your faculty starts the session at the centre';
-      act = '<button class="btn" data-go="' + p.href + '">Start test</button>';
+      /* A paper that is not open yet must not offer a live button. The worker refuses the
+         attempt anyway, so a clickable Start test only sends students into a dead end and
+         generates invigilation noise at the centre. */
+      act = p.openNow
+        ? '<button class="btn" data-go="' + p.href + '">Start test</button>'
+        : '<button class="btn btn-ghost" disabled title="Your faculty opens this at the '
+          + 'centre when the session starts">Start test</button>';
     }
 
     el.innerHTML =
