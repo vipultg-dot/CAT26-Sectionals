@@ -215,7 +215,10 @@ async function loadSessions(){
       const until = p.open_until ? new Date(p.open_until) : null;
       const openNow = !!p.openNow;
       el.innerHTML =
-        '<div class="k">' + h(p.name) + (p.ready ? '' : ' <em>(not built)</em>') + '</div>' +
+        /* This flag is the D1 'ready' column and nothing else — it says the paper has not
+           been made live yet, NOT that the page is missing from the site. Calling it
+           "not built" sent faculty hunting for a file that was already deployed. */
+        '<div class="k">' + h(p.name) + (p.ready ? '' : ' <em>(not live yet)</em>') + '</div>' +
         '<div class="v" style="font-size:19px;color:' + (openNow ? '#1B5E3F' : '#8A5A00') + '">' +
           (openNow ? 'Open' : 'Closed') + '</div>' +
         '<div class="s">' + (openNow && until
