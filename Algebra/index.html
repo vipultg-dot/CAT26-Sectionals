@@ -468,6 +468,11 @@ section.blk:last-of-type{border-bottom:0}
 .gatecard p{margin:0 0 20px;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:64ch}
 .gaterow{display:flex;gap:12px;flex-wrap:wrap}
 .gaterow .btn[disabled]{opacity:.45;cursor:not-allowed}
+/* per-student randomisation: the canonical question id, so a hall query is resolvable
+   when no two students see the same question number */
+.chip.qid{background:transparent;border:1px dashed #CFC7B6;color:#8A8578;
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.02em}
+.seqmath{display:block;margin-top:6px;color:#8A8578;font-size:12.5px;line-height:1.55}
 </style>
 </head>
 <body>
@@ -620,7 +625,7 @@ section.blk:last-of-type{border-bottom:0}
     <div class="qpane">
       <div class="qhead">
         <div class="qnum" id="qnum">Question 1</div>
-        <div class="qmeta"><span class="chip" id="qsub"></span><span class="chip" id="qtype"></span></div>
+        <div class="qmeta"><span class="chip" id="qsub"></span><span class="chip" id="qtype"></span><span class="chip qid" id="qcanon"></span></div>
       </div>
       <div class="setpane" id="setpane"></div>
       <div class="qtext" id="qtext"></div>
@@ -1634,12 +1639,17 @@ $('#begin').onclick = () => {
   S.startedAt = now(); S.t0 = now(); S.ended = false;
   S.gap = 0; S.resumes = 0;
   clearProgress();                  // a fresh sitting supersedes anything left on this machine
-  runTest(0);
+  runTest(null);
 };
 
 /* The one way into the test screen — a fresh start and a resume both come through here. */
 function runTest(at) {
-  show('test'); buildPalette(); goTo(at, true); tick();
+  /* Rebuilt here and nowhere else, so every way into the test screen — a fresh start, a
+     resume, a crash recovery — produces the same paper for the same PIN. */
+  buildShuffleFor(S.pin);
+  show('test'); buildPalette();
+  /* null means "wherever this student's paper begins", which is not canonical question 1. */
+  goTo(at === null || at === undefined ? SH.ord[0] : at, true); tick();
   if (S.ended) return;              // resumed after the clock had already run out
   if (timerId) clearInterval(timerId);
   timerId = setInterval(tick, 250);
@@ -1682,13 +1692,135 @@ function tick() {
   if (left <= 0) { t.textContent = '00:00'; S.autoSub = true; finish(); }
 }
 
+
+/* ---------------- per-student randomisation ----------------
+   Students sit in a lab and all start the same paper in the same minute. Identical
+   question 1 on every screen invites copying, and the real CAT gives two candidates side
+   by side a different question order and a different option order anyway.
+
+   The whole mechanism is a VIEW LAYER. QS stays canonical and so does every piece of
+   state built on it — S.ans, S.marked, S.seen, every event in S.ev, the timeline, the
+   payload and the Worker's key table. Only two things are permuted: what gets drawn, and
+   what a click means. That is why grading, crash recovery, paperSig(), the keys table and
+   the whole backend needed no change at all: none of them can tell this exists.
+   ---------------------------------------------------------- */
+/* ==== SHUFFLE MODULE — extracted verbatim by test_shuffle.mjs, which runs these exact
+   bytes rather than a copy of them. Keep it pure: no DOM, no CONFIG, no S. ==== */
+
+/* Mulberry32, seeded from a real digest. The seed matters more than the generator here:
+   IMS PINs run near-consecutively (IMS0000418828, ...829, ...830) and students holding
+   consecutive PINs plausibly sit at adjacent desks, so a cheap string hash would hand
+   neighbours correlated papers — the one thing this feature exists to prevent. Eight
+   bytes of SHA-256 give full avalanche, so consecutive PINs are unrelated. */
+function mulberry32(a) {
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function shuffleSeed(pin, paper, salt) {
+  const h = sha256sync(String(salt) + '|' + String(paper) + '|' + String(pin).toUpperCase());
+  return ((h[0] << 24) ^ (h[1] << 16) ^ (h[2] << 8) ^ h[3] ^
+          (h[4] << 20) ^ (h[5] << 12) ^ (h[6] << 4) ^ h[7]) | 0;
+}
+function shuffled(arr, rnd) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* Returns the three maps the player draws through:
+     ord[d] = canonical index of the question shown at display position d
+     pos[c] = display position of canonical question c
+     opt[c] = the canonical option numbers in the order they are DRAWN, so display slot
+              j carries canonical option opt[c][j]. null for TITA, which has no options. */
+function buildShuffle(qs, pin, paper, salt) {
+  const rnd = mulberry32(shuffleSeed(pin, paper, salt));
+  const n = qs.length;
+
+  /* DILR is set-based: five caselets of 5/5/4/4/4 questions sharing one data set, written
+     to be read in sequence. The caselets move as blocks and the questions inside one stay
+     together and in order — shuffling them individually would make the paper unusable.
+     The four QA papers carry no "set" key and shuffle freely. */
+  let ord;
+  if (qs.some(q => q && q.set)) {
+    const blocks = [], at = {};
+    qs.forEach((q, i) => {
+      const k = q.set;
+      if (!(k in at)) { at[k] = blocks.length; blocks.push([]); }
+      blocks[at[k]].push(i);
+    });
+    ord = [];
+    shuffled(blocks, rnd).forEach(b => { b.forEach(i => ord.push(i)); });
+  } else {
+    ord = shuffled(qs.map((q, i) => i), rnd);
+  }
+
+  const pos = new Array(n);
+  ord.forEach((c, d) => { pos[c] = d; });
+
+  /* Drawn in canonical question order, so which options a student sees does not depend on
+     which question order they were dealt. */
+  const opt = qs.map(q => (q && q.type === 'MCQ' && q.opts && q.opts.length > 1)
+    ? shuffled(q.opts.map((o, j) => j + 1), rnd) : null);
+
+  return { ord, pos, opt };
+}
+
+/* Pearson correlation of two paired rank vectors — Spearman's rho once the caller has
+   turned values into ranks, mean-ranked for ties. */
+function rhoOf(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return null;
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+  mx /= n; my /= n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) {
+    const x = xs[i] - mx, y = ys[i] - my;
+    sxy += x * y; sxx += x * x; syy += y * y;
+  }
+  return (sxx && syy) ? sxy / Math.sqrt(sxx * syy) : 0;
+}
+
+/* The order a candidate took questions in only means something against the order they
+   were DEALT. A lucky permutation puts the cheap questions early and scores a fine rho
+   for nothing. So the raw rho is scored against the rho a plain front-to-back walk
+   through that student's own paper would have produced, and the difference is divided by
+   the headroom that permutation actually left — 1-base going up, 1+base going down.
+   Without that division a student dealt a hostile order has 1.6 of room to improve and a
+   student dealt a kind one has 0.4, and the free marks the shuffle was meant to remove
+   come straight back one layer down. */
+function adjustRho(actual, base) {
+  if (actual === null || base === null || actual === undefined || base === undefined) return null;
+  const head = actual >= base ? (1 - base) : (1 + base);
+  if (head <= 1e-9) return 0;
+  const v = (actual - base) / head;
+  return v < -1 ? -1 : (v > 1 ? 1 : v);
+}
+/* ==== END SHUFFLE MODULE ==== */
+
+/* Page glue. SH is rebuilt from the PIN at every entry into the test screen, so a reload,
+   a resume and a crash recovery all reproduce the identical paper. */
+let SH = { ord: null, pos: null, opt: null };
+function buildShuffleFor(pin) {
+  SH = buildShuffle(QS, pin, CONFIG.PAPER_ID, CONFIG.SALT);
+  return SH;
+}
+
 /* ---------------- palette ---------------- */
 function buildPalette() {
   const g = $('#palgrid'); g.innerHTML = '';
-  for (let i = 0; i < N; i++) {
-    const b = el('button', 'pb', String(i + 1));
-    if (QS[i].set) b.dataset.set = String(QS[i].set).replace(/\D/g, '');
-    b.onclick = () => goTo(i);
+  for (let d = 0; d < N; d++) {
+    const c = SH.ord[d];
+    const b = el('button', 'pb', String(d + 1));
+    if (QS[c].set) b.dataset.set = String(QS[c].set).replace(/\D/g, '');
+    b.onclick = () => goTo(c);
     g.appendChild(b);
   }
   paintPalSets();
@@ -1697,8 +1829,9 @@ function buildPalette() {
 function paint() {
   const gs = $('#palgrid').children;
   let a = 0, m = 0, nv = 0;
-  for (let i = 0; i < N; i++) {
-    const b = gs[i]; b.className = 'pb';
+  for (let d = 0; d < N; d++) {
+    const i = SH.ord[d];
+    const b = gs[d]; b.className = 'pb';
     const has = S.ans[i] !== null && S.ans[i] !== '';
     const f = S.marked[i];
     if (f === 1) b.classList.add(has ? 'ansmark' : 'mark');
@@ -1762,13 +1895,16 @@ function renderSet(sid) {
 function paintPalSets() {
   const ps = $('#palsets');
   if (!ps) return;
+  /* Ranges are per student now: the caselets were shuffled as blocks, so "Q1-Q5" has to be
+     read off the DISPLAY order or the panel points at the wrong palette buttons. */
   const seen = [];
-  QS.forEach((q, i) => {
-    if (!q.set) return;
+  for (let d = 0; d < N; d++) {
+    const q = QS[SH.ord[d]];
+    if (!q.set) continue;
     const e = seen.find(s => s.id === q.set);
-    if (e) e.b = i + 1;
-    else seen.push({ id: q.set, label: (SETS[q.set] || {}).label || q.set, a: i + 1, b: i + 1 });
-  });
+    if (e) e.b = d + 1;
+    else seen.push({ id: q.set, label: (SETS[q.set] || {}).label || q.set, a: d + 1, b: d + 1 });
+  }
   ps.innerHTML = seen.map(s => s.label + ' &middot; Q' + s.a + '\u2013Q' + s.b).join('<br>');
 }
 
@@ -1781,20 +1917,27 @@ function goTo(i, first) {
   S.enterT = clk();
   log('enter', S.cur);
   const q = QS[S.cur];
-  $('#qnum').textContent = 'Question ' + (S.cur + 1);
+  /* S.cur is canonical throughout; only the number on the screen is the display position. */
+  $('#qnum').textContent = 'Question ' + (SH.pos[S.cur] + 1);
   renderSet(q.set);
   $('#qsub').textContent = q.sub;
+  /* No two students see the same question under the same number any more, so the canonical
+     id is printed for invigilation: a candidate reads it out and faculty can find it. */
+  const qc = $('#qcanon'); if (qc) qc.textContent = q.id;
   const ty = $('#qtype'); ty.textContent = q.type === 'TITA' ? 'TITA · no negative' : 'MCQ · +3 / −1';
   ty.className = 'chip' + (q.type === 'TITA' ? ' tita' : '');
   $('#qtext').innerHTML = MATH(q.q);
   const body = $('#qbody'); body.innerHTML = '';
   if (q.type === 'MCQ') {
     const wrap = el('div', 'opts');
-    q.opts.forEach((o, j) => {
-      const b = el('button', 'opt' + (S.ans[S.cur] === j + 1 ? ' sel' : ''));
+    /* Display slot j shows canonical option om[j], and the click hands pick() the CANONICAL
+       number. This is the only place the option permutation is applied. */
+    const om = SH.opt[S.cur] || q.opts.map((o, j) => j + 1);
+    om.forEach((k, j) => {
+      const b = el('button', 'opt' + (S.ans[S.cur] === k ? ' sel' : ''));
       b.appendChild(el('span', 'optn', '(' + (j + 1) + ')'));
-      b.appendChild(elm('span', 'optv', o));
-      b.onclick = () => pick(j + 1);
+      b.appendChild(elm('span', 'optv', q.opts[k - 1]));
+      b.onclick = () => pick(k);
       wrap.appendChild(b);
     });
     body.appendChild(wrap);
@@ -1840,14 +1983,20 @@ function buildKeypad(inp) {
   });
   return pad;
 }
+/* k is the CANONICAL option number, mapped at the click. Everything downstream of this
+   line — the event log, the change history, the payload, the Worker's key table — is in
+   canonical numbers and knows nothing about the shuffle. */
 function pick(k) {
   S.ans[S.cur] = k; log('select', S.cur, k);
-  document.querySelectorAll('.opt').forEach((b, j) => b.classList.toggle('sel', j + 1 === k));
+  const om = SH.opt[S.cur];
+  document.querySelectorAll('.opt').forEach((b, j) =>
+    b.classList.toggle('sel', (om ? om[j] : j + 1) === k));
   paint();
   saveProgress();
 }
-$('#a-next').onclick = () => { if (S.cur < N - 1) goTo(S.cur + 1); else goTo(0); };
-$('#a-prev').onclick = () => goTo(S.cur > 0 ? S.cur - 1 : N - 1);
+/* Next and Previous step through the paper the student was dealt, not the canonical one. */
+$('#a-next').onclick = () => goTo(SH.ord[(SH.pos[S.cur] + 1) % N]);
+$('#a-prev').onclick = () => goTo(SH.ord[(SH.pos[S.cur] + N - 1) % N]);
 $('#a-clear').onclick = () => { S.ans[S.cur] = null; log('clear', S.cur); goTo(S.cur, false); };
 /* Two-pass method: on the single Q1->Q22 pass every question you do not solve outright is
    either one you will return to, or one you are done with. Recording which is which is what
@@ -1857,7 +2006,8 @@ function flag(v) {
   S.marked[S.cur] = (S.marked[S.cur] === v) ? 0 : v;
   const f = S.marked[S.cur];
   log(f === 1 ? 'come' : f === 2 ? 'leave' : 'unflag', S.cur);
-  if (f && S.cur < N - 1) goTo(S.cur + 1); else paint();
+  const d = SH.pos[S.cur];
+  if (f && d < N - 1) goTo(SH.ord[d + 1]); else paint();
   saveProgress();
 }
 $('#a-come').onclick = () => flag(1);
@@ -1874,7 +2024,11 @@ document.addEventListener('keydown', e => {
      question with option 5 — worse than nothing happening. */
   if (CALC.open) { log('calckey', S.cur, e.key); return; }
   if (e.target.tagName === 'INPUT' && !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-  if (e.key >= '1' && e.key <= '4' && QS[S.cur].type === 'MCQ') { pick(+e.key); e.preventDefault(); }
+  if (e.key >= '1' && e.key <= '4' && QS[S.cur].type === 'MCQ') {
+    const om = SH.opt[S.cur], j = +e.key - 1;
+    if (om ? j < om.length : j < 4) pick(om ? om[j] : j + 1);
+    e.preventDefault();
+  }
   else if (e.key === 'Enter') { $('#a-next').click(); e.preventDefault(); }
   else if (e.key === 'ArrowRight') { $('#a-next').click(); e.preventDefault(); }
   else if (e.key === 'ArrowLeft') { $('#a-prev').click(); e.preventDefault(); }
@@ -2059,6 +2213,7 @@ window.addEventListener('resize', () => { if (CALC.open) calcMove(CALC.x, CALC.y
    question bank. */
 /* synchronous SHA-256 — the digest fallback wherever crypto.subtle is unavailable, and
    the basis of the enrolment PIN hash */
+/* ==== DIGEST MODULE — extracted verbatim by test_shuffle.mjs. Do not rename. ==== */
 function sha256sync(msg) {
   const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
     0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -2100,6 +2255,7 @@ function sha256sync(msg) {
   return o;
 }
 const hex = u8 => [...u8].map(x => x.toString(16).padStart(2, '0')).join('');
+/* ==== END DIGEST MODULE ==== */
 async function sha(s) {
   /* crypto.subtle exists only in a secure context (https / localhost). Opening the
      file straight off the disk is file:// — not secure — so fall back to the
@@ -2209,6 +2365,11 @@ function showUnsent(j) {
 function analyse(g, segs) {
   const per = QS.map((q, i) => ({
     n: i + 1, id: q.id, sub: q.sub, rate: q.rate, type: q.type, bench: q.bench,
+    /* Where this canonical question sat on THIS student's screen, and the option order they
+       were shown. Both are stored into the report so Review redraws their paper exactly as
+       they saw it without re-deriving anything from the PIN. */
+    shown: (SH.pos && SH.pos[i] != null) ? SH.pos[i] + 1 : i + 1,
+    omap: (SH.opt && SH.opt[i]) ? SH.opt[i].slice() : null,
     /* g is the Worker's verdict list. It is null on the first pass, which runs before the
        paper has been sent, purely to assemble the telemetry that gets sent. Nothing that
        depends on correctness is read from that pass. `method` and `key` are absent by
@@ -2295,25 +2456,28 @@ function analyse(g, segs) {
   // triage: rank correlation between answer order and difficulty
   const ordered = per.filter(p => p.firstAnsAt !== null).sort((a, b) => a.firstAnsAt - b.firstAnsAt);
   ordered.forEach((p, i) => p.ansOrder = i + 1);
-  let rho = null;
+  let rho = null, rhoBase = null, rhoAdj = null;
   if (ordered.length >= 5) {
     const rk = [...ordered].sort((a, b) => a.rate - b.rate);
     const rankOf = {}; let i = 0;
     while (i < rk.length) { let j = i; while (j + 1 < rk.length && rk[j + 1].rate === rk[i].rate) j++;
       const r = (i + j) / 2 + 1; for (let k = i; k <= j; k++) rankOf[rk[k].n] = r; i = j + 1; }
-    const nn = ordered.length;
-    const mx = (nn + 1) / 2;
-    let sxy = 0, sxx = 0, syy = 0;
-    ordered.forEach(p => { const x = p.ansOrder - mx, y = rankOf[p.n] - mx;
-      sxy += x * y; sxx += x * x; syy += y * y; });
-    rho = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+    const ys = ordered.map(p => rankOf[p.n]);
+    rho = rhoOf(ordered.map(p => p.ansOrder), ys);
+    /* The same questions taken in the order this student's own paper presented them: what a
+       plain front-to-back walk would have scored. That is the part of their rho the deal
+       handed them for free, and it is subtracted before they are credited with anything. */
+    const walkRank = {};
+    [...ordered].sort((a, b) => a.shown - b.shown).forEach((p, k) => { walkRank[p.n] = k + 1; });
+    rhoBase = rhoOf(ordered.map(p => walkRank[p.n]), ys);
+    rhoAdj = adjustRho(rho, rhoBase);
   }
   const hardEarly = per.filter(p => p.rate >= 7 && p.firstAnsAt !== null && p.firstAnsAt <= 600).length;
   const flipHurt = per.filter(p => p.changes > 0 && !p.correct && p.answered).length;
   const flips = per.filter(p => p.changes > 0).length;
 
   return { per, score, correct, wrongMCQ, wrongTITA, attempted, tProd, tNeg, tBleed, tScan,
-    wasted, cheap, couldBuy, rho, hardEarly, flips, flipHurt,
+    wasted, cheap, couldBuy, rho, rhoBase, rhoAdj, hardEarly, flips, flipHurt,
     used: Math.min(S.endT, CONFIG.DURATION), auto: S.autoSub,
     gap: Math.min(S.gap, CONFIG.DURATION), resumes: S.resumes,
     maxScore: N * 3, benchTotal: QS.reduce((a, q) => a + q.bench, 0),
@@ -2611,6 +2775,20 @@ function drawTriage(A) {
       stroke: m >= 0 ? '#1B5E3F' : '#C00000', 'stroke-width': 2, 'stroke-dasharray': '5 4',
       opacity: .7 }));
   }
+  /* The same points laid out in the order the paper actually handed them over: the walk this
+     student would have made by simply pressing Next twenty-two times. Their own line is only
+     worth something to the extent it beats this one. */
+  if (typeof A.rhoBase === 'number' && pts.length > 1 && pts.every(p => p.shown)) {
+    const walk = pts.slice().sort((a, b) => a.shown - b.shown);
+    const n2 = walk.length, mx2 = (n2 + 1) / 2;
+    const my2 = walk.reduce((a, p) => a + p.rate, 0) / n2;
+    let nu = 0, de = 0;
+    walk.forEach((p, k) => { nu += (k + 1 - mx2) * (p.rate - my2); de += (k + 1 - mx2) ** 2; });
+    const m2 = de ? nu / de : 0;
+    svg.appendChild(mk('line', { x1: x(1), y1: y(my2 + m2 * (1 - mx2)),
+      x2: x(maxO), y2: y(my2 + m2 * (maxO - mx2)),
+      stroke: '#8A8578', 'stroke-width': 1.5, 'stroke-dasharray': '2 5', opacity: .75 }));
+  }
   pts.forEach(p => {
     svg.appendChild(mk('circle', { cx: x(p.ansOrder), cy: y(p.rate), r: 8,
       fill: CL[p.cls].c, opacity: .9 }));
@@ -2619,28 +2797,54 @@ function drawTriage(A) {
     t.textContent = p.n; svg.appendChild(t);
   });
   box.appendChild(svg);
+  /* Scored on the ADJUSTED figure. The raw rho rewards a kind permutation, and since every
+     student is dealt a different one it cannot be compared across a batch. */
+  const ra = (typeof A.rhoAdj === 'number') ? A.rhoAdj : null;
   let verdict;
-  if (A.rho === null) verdict = 'Too few answers to read a sequence from.';
-  else if (A.rho > .35) verdict = 'Strong order. You banked the cheap marks first and met the hard ' +
-    'questions late, which is exactly the right shape.';
-  else if (A.rho > 0) verdict = 'Mixed. There is a mild upward drift, but several expensive ' +
-    'questions were taken on before the cheap ones were finished.';
-  else verdict = 'Poor. You went at the hard questions early. On a paper deliberately longer than ' +
-    'its clock, that is the single most expensive habit there is.';
+  if (ra === null) verdict = 'Too few answers to read a sequence from.';
+  else if (ra > .35) verdict = 'Strong. You pulled the cheap marks well forward of the order your ' +
+    'paper handed you — that is the whole skill this test is built to measure.';
+  else if (ra > .10) verdict = 'Some improvement on the order you were dealt, but several expensive ' +
+    'questions were still taken on before the cheap ones were finished.';
+  else if (ra > -.10) verdict = 'You worked through your paper roughly as it came. Very little ' +
+    'triage happened here — the order you answered in is close to the order you were given.';
+  else verdict = 'Poor. You went at the hard questions earlier than your own paper even put them. ' +
+    'On a paper deliberately longer than its clock, that is the most expensive habit there is.';
   const note = el('p', 'plotnote');
-  note.innerHTML = '<b>Sequence: ' + (A.rho === null ? '—' : A.rho.toFixed(2)) + '.</b> ' + verdict +
+  note.innerHTML = '<b>Sequence: ' +
+    (ra === null ? '—' : (ra > 0 ? '+' : '') + ra.toFixed(2)) + '.</b> ' + verdict +
     (A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
-      (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '');
+      (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '') +
+    ((typeof A.rho === 'number' && typeof A.rhoBase === 'number')
+      ? '<span class="seqmath">The order you actually took them in scores ' + A.rho.toFixed(2) +
+        '. Working straight through the paper you were dealt, front to back, would have scored ' +
+        A.rhoBase.toFixed(2) + ' on its own — the grey dashed line. Every student sits a ' +
+        'different order, so you are measured on how far you improved on your own, not on the one ' +
+        'you happened to be given.</span>'
+      : '');
   box.appendChild(note);
+}
+
+/* The key is stored as a canonical option number, which means nothing to a student whose
+   options were drawn in another order. Show the slot THEY saw, plus the option text, which is
+   right whatever order it was in. A TITA key is already the answer itself. */
+function answerLabel(p, q) {
+  if (!q || q.type !== 'MCQ') return String(p.key);
+  const k = parseInt(p.key, 10);
+  if (!(k >= 1) || !q.opts || q.opts[k - 1] === undefined) return String(p.key);
+  const slot = (p.omap && p.omap.indexOf(k) >= 0) ? p.omap.indexOf(k) + 1 : k;
+  return '(' + slot + ')  ' + q.opts[k - 1];
 }
 
 function drawTable(A) {
   const T = $('#qtable'); T.innerHTML = '';
   const thead = el('thead');
   const hr = el('tr');
-  ['#', 'ID', 'Sub-topic', 'R', 'Type', 'Outcome', 'Your time', 'Bench', 'Peer', 'Solved in',
-   'Visits', ''].forEach((h, i) => {
-    const th = el('th', i >= 6 && i <= 9 ? 'r' : '', h); hr.appendChild(th);
+  /* "#" is the canonical number, the one everybody in a post-test discussion means. "Saw" is
+     where that question sat on this student's own screen. */
+  ['#', 'Saw', 'ID', 'Sub-topic', 'R', 'Type', 'Outcome', 'Your time', 'Bench', 'Peer',
+   'Solved in', 'Visits', ''].forEach((h, i) => {
+    const th = el('th', i >= 7 && i <= 10 ? 'r' : '', h); hr.appendChild(th);
   });
   thead.appendChild(hr); T.appendChild(thead);
   const tb = el('tbody');
@@ -2650,6 +2854,7 @@ function drawTable(A) {
   A.per.forEach(p => {
     const tr = el('tr', ['wrong', 'sunk', 'bleed'].includes(p.cls) ? 'miss' : '');
     tr.appendChild(el('td', 'num', p.n));
+    tr.appendChild(el('td', 'num', p.shown || '—'));
     tr.appendChild(el('td', 'qid', p.id));
     tr.appendChild(el('td', '', p.sub));
     tr.appendChild(el('td', 'num', p.rate));
@@ -2668,7 +2873,7 @@ function drawTable(A) {
     last.appendChild(b); tr.appendChild(last);
     tb.appendChild(tr);
     const mr = el('tr', 'mrow');
-    const mtd = el('td'); mtd.colSpan = 12;
+    const mtd = el('td'); mtd.colSpan = 13;
     const mv = el('div', 'meth');
     /* p.key and p.method are attached by doReview() from the released report and are
        absent everywhere else, including on the screen a candidate lands on the moment
@@ -2676,7 +2881,7 @@ function drawTable(A) {
     const ka = el('b');
     ka.innerHTML = (p.key === undefined || p.key === null || p.key === '')
       ? 'Answer and method are released with your report.'
-      : 'Answer: ' + MATH(p.key) + '.  ';
+      : 'Answer: ' + MATH(answerLabel(p, QS[p.n - 1])) + '.  ';
     ka.style.color = 'var(--ok)';
     const qq = QS[p.n - 1];
     if (qq && qq.set && SETS[qq.set]) {
