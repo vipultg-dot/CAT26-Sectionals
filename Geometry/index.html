@@ -139,6 +139,37 @@ h2.disp{font-family:var(--f-disp);font-weight:600;font-size:clamp(28px,3.4vw,40p
 .chip{border:1px solid var(--rule);padding:3px 9px;background:var(--card)}
 .chip.tita{border-color:var(--navy);color:var(--navy)}
 .qtext{font-size:17px;line-height:1.72;margin:26px 0 30px;max-width:70ch}
+/* ---- DILR set panel. Every rule here is dead on a paper with no sets: .setpane never
+   gets .on, and no .pb ever gets a data-set attribute. ---- */
+/* No max-height and no inner scroll. A capped panel silently hides the tail of a caselet —
+   a candidate who never scrolls it simply does not see conditions 5 and 6, with no cue that
+   they exist. The set's data is always rendered in full; the page scrolls instead. */
+.setpane{display:none;margin:22px 0 2px;max-width:70ch;border:1px solid var(--rule);
+  border-radius:9px;background:var(--paper-2)}
+.setpane.on{display:block}
+.setpane .sp-h{background:var(--paper-2);border-radius:9px 9px 0 0;
+  padding:11px 20px 9px;border-bottom:1px solid var(--rule);font-family:var(--f-ui);
+  font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+  color:var(--ink-3)}
+.setpane .sp-b{padding:15px 20px 17px;font-size:15.5px;line-height:1.68;color:var(--ink)}
+.setpane .sp-b p{margin:0 0 10px}
+.setpane .sp-b p:last-child{margin-bottom:0}
+.setpane .sp-b ol{margin:9px 0 4px;padding-left:23px}
+.setpane .sp-b li{margin:0 0 6px}
+.dtblwrap{overflow-x:auto;margin:13px 0 7px}
+.dtbl{border-collapse:collapse;font-size:14.5px;font-family:var(--f-ui)}
+.dtbl th,.dtbl td{border:1px solid var(--rule);padding:7px 15px;text-align:left}
+.dtbl th{font-weight:600;background:var(--paper);color:var(--ink-2)}
+.dtbl td.n,.dtbl th.n{text-align:right;font-family:var(--f-mono);
+  font-variant-numeric:tabular-nums}
+.pb[data-set="1"],.pb[data-set="3"],.pb[data-set="5"]{box-shadow:inset 0 -3.5px 0 rgba(31,56,100,.42)}
+.pb[data-set="2"],.pb[data-set="4"]{box-shadow:inset 0 -3.5px 0 rgba(31,56,100,.14)}
+.palsets{margin:11px 0 0;font-size:11px;line-height:1.75;color:var(--ink-3);
+  font-family:var(--f-ui)}
+.meth .setrecap{margin:0 0 12px;padding:11px 15px;border-left:3px solid var(--rule);
+  background:var(--paper-2);border-radius:0 6px 6px 0}
+.meth .setrecap p{margin:0 0 8px}
+.meth .setrecap .setq{margin-top:10px;font-weight:600;color:var(--ink)}
 .opts{display:grid;gap:10px;max-width:640px}
 .opt{display:flex;align-items:flex-start;gap:13px;padding:13px 16px;border:1.5px solid var(--rule);
   background:var(--card);text-align:left;transition:border-color .12s,background .12s;width:100%}
@@ -578,12 +609,14 @@ section.blk:last-of-type{border-bottom:0}
         <div class="qnum" id="qnum">Question 1</div>
         <div class="qmeta"><span class="chip" id="qsub"></span><span class="chip" id="qtype"></span></div>
       </div>
+      <div class="setpane" id="setpane"></div>
       <div class="qtext" id="qtext"></div>
       <div id="qbody"></div>
     </div>
     <aside class="pal">
       <h5>Question palette</h5>
       <div class="palgrid" id="palgrid"></div>
+      <div class="palsets" id="palsets"></div>
       <div class="palstat">
         <div><span>Answered</span><b id="s-ans">0</b></div>
         <div><span>Marked</span><b id="s-mark">0</b></div>
@@ -728,7 +761,12 @@ const CONFIG = {
   PEER_MIN: 30,          // real peer data replaces the model at this many attempts
   BLEED_AFTER: 45,       // seconds on a blank question before it counts as bleed
   SUNK_AFTER: 120,       // seconds on a wrong question before it counts as sunk
-  SEND_JITTER: 20,       // seconds of random spread on auto-submit, to flatten the burst
+  /* Seconds of random spread on auto-submit, to flatten the burst of 300 papers arriving
+     in the same second. It used to be 20, which was free because the full report was
+     already on screen while it ran. The paper is now marked by the Worker, so this is
+     time the candidate spends watching a message instead of a score — cut to four, which
+     still spreads the burst to well under a hundred a second. */
+  SEND_JITTER: 4,
   SEND_TRIES: 4,         // send attempts before the payload is parked for a later retry
   SAVE_EVERY: 4,         // seconds between crash-recovery snapshots
   RESUME_MAX: 24 * 3600  // an unfinished attempt older than this is dropped, never offered
@@ -748,10 +786,7 @@ const QS = [
    "48",
    "\\frac{396}{7}"
   ],
-  "bench": 150,
-  "k": "abd9c7d0003b859d7fe8f7f924949c04d9ce8cf8493eab625bf3df6c741793c0",
-  "m": "B1ZJf4TX8Ws+ymuuTA/ZKOzc9j1DiNm+NzuwBBq/xAwnB31cyMqlSxaNJeB6ONlzvoS7NgKej+ZlfuZQGpruWn8HflrI3KVJFI0z4AlI2S/w17teY4iS+wQJ9Vcam+lafwcLPsPXvSptjT/1FFyKIb7R4j1qzd20K2+hFF/4zAgnRhxxjtfESBONZ7MYRM1gvuDyc0HNj58Cb7wPGqjMCCNLUHuE1/FlcOxM7BgIiyf/3fxxR4jsnwJvvA8aq8QXK0tdbMiD6iok32ehVhuVK77w2VwC38avLW+nHU6xwloBYxwkyLTHKm2NNuACXMh6vo67KQKSj+xrb4EUX/jMCCdGHHeb1/FiNd9rplcOnG6mh7tpS8XKqGV+41MO4YFaNU9VfYDX7HlwnDfyF0vX",
-  "a": "JRDp4gcCaAALsSvY7g=="
+  "bench": 150
  },
  {
   "n": 2,
@@ -761,10 +796,7 @@ const QS = [
   "type": "TITA",
   "q": "Two circles of radii 15 cm and 20 cm intersect at two points, and their common chord has length 24 cm. The distance between their centres can take two different values. What is the sum of those two values, in cm?",
   "opts": null,
-  "bench": 150,
-  "k": "12f9c7f6e054d28450ce63a84d6db433f845916ff5f51c019b5df88b3a2eca97",
-  "m": "thorwKhA30oaudw/dnNBq/Jhmj7wZLW5nYaxrFCi7t+OHinC4VfCQ1uolDZ2eAzi9SnOLK8pp7rRl6vpE7fl2YweZ9LnFMNHX/rXOGtlBeLoMot4tCHmpcyHuLsV8vnCkQ9nye4UhR0P+tk5amIS4rB1nyD8M66/3pr5oAPysoHeGinCqFLFQFf6wDhhNw2j8ybOfvwno7jJgLzpBLrujY0KMsf6UZddVbXAcGtxQfaxcYthtSqzpZ3D7f1c8vzFlxgvhuFHlx4M9JQHbWMJ4vUpziy/Iaiiz5eq6R+8q8KOCyjV4UDSD0mz0DV3Nw6koTXDafwnrrnPlvm9GLeryZcIM8fmV9IPU6mUaSQ8QfO3YZYs7nHo9uqbraFQsOTZllsoyKhA30oaqdU9YTcSq+Uki2WoZK+lncPv6R275diNW36GtRSAAxq72jQkZAis4iSLPuxkq7/Th6rpQeerkN5OZ8/7FNtKSamUJGx2D+K2YcpiuGTx9tSB+aUVofiNihMmyKgHggMartw1JHQIsOItzn/8N7K/0Z75pBW3/42fD2fS/1uXX1Wz2iR3O0Gx7mHfZLU35rXcgbzpGaGrypsVMs/mUZkPbrLRcHdiDOLoMos+6WTt9orS5OlD4KU=",
-  "a": "NhA="
+  "bench": 150
  },
  {
   "n": 3,
@@ -779,10 +811,7 @@ const QS = [
    "72\\pi",
    "128\\pi"
   ],
-  "bench": 120,
-  "k": "2f4d9cf489b53691738a3ee1256c5d8dce33ded40aab115e18968c321e804273",
-  "m": "CybOPeDhHMq3X44AD9PTRfiNUpIoLjv47+CWX0VDcCsyIIs77aRV2O9ChwkP2c9J4owcjShtIPeg79gLRFU/KyEtgiz7pEjZpleBC0PVgUXt3h2APihvoLKu10VJBjUpNymCafvtWM68FoodWtHNCv+RX5UlKG/i7O/YXw1ONTElIJplqPBUzu9FnhlOwsQK+ZEQlW0iKbGzuJZbQVMjeCponTj95U7OqxjPOEfR1QrikByIPy4j9KDm11gNVDE8Kz2dab7sHM+mQIYIStSBSPLeScE9ITrioPreTg1VPDksPM4h7e1bw7sazx9AkNJP/4oWjyptJuWg68deTEpwLC1o3Wnv7UrOvBabBEqQ0lv+nw2EbT8g/vSu2U0NFWZ4MiSbOqjsHNi+Q44eStSBT/qLHo1tOSCxsuaWRkRIJStifsBp2/VJyr1fgQsP18hc7o1f0iVtPOD178ROSQZteHB8hmWo91OLpxbSTBeegX7jm1+XIiE6/OWu31gNST49YjyGIPrgHN+mW4ofD8DICv+XEoQ+bXynoPrfRkhVcGBuaJkh4edUi6ZFz1UZkNFDpQ==",
-  "a": "VkpS+6g="
+  "bench": 120
  },
  {
   "n": 4,
@@ -792,10 +821,7 @@ const QS = [
   "type": "TITA",
   "q": "In trapezium ABCD, AB is parallel to CD and the diagonals meet at O. The areas of triangles AOB and COD are 81 square cm and 36 square cm respectively. What is the area of the trapezium, in square cm?",
   "opts": null,
-  "bench": 120,
-  "k": "3a9e0b673c4cf32e4dee66ff92817ec6b64180e36fe44e38d2ea8204d321f1ee",
-  "m": "B3nGx94W6eENSaw9qEle9NeIyl9vKK3cHFtg34SfLBghJ4/V31HExl5TzTGuSVbpk9zhdQt7vdsYCXaWm5kvDXNkyYaIQKXwEUmZGo9JTOvGyft1C3qjwQ1bfNDJxXZVc3/Hx8RR7PdeWs1IylsRuufa4HFFb6DLCltS+a3WIRc3K+3p81Hg5R0BzRqLH1q60trscQttvdsYFzPChtY0ETYryMPfHODwDACOUocMXvSTx+8wX2CpjhYPe9Ob1jQOPCeP0tgUpfcPHIwAj0lN9dzcqX9NKPSfWQ9624yFYEplJ4/R2Bjm7F4AnlLfXRG658DsMF96rd4cAXrDhNYpCnMznoabUbayXkLNR95JFLqGnKktCzr+m1c=",
-  "a": "+yfc"
+  "bench": 120
  },
  {
   "n": 5,
@@ -810,10 +836,7 @@ const QS = [
    "24",
    "36"
   ],
-  "bench": 120,
-  "k": "495df53479b298eda8623814811dad7cebbbb60c9515c6d378f45058ffac0b90",
-  "m": "/Go4r6uYOHRdy8dG0C387+zGPr9MvKvF/ABCI24KWIbNIirmuZlqcUyZ0EDdLOa7rZ98vxXmp5G8VU5wKVYV1IDg1R373Wo3AMvFR9ppvaupibIXt/minbQSCj9sGhmV2mc8r6SCajAbxYR91iy19+zHNb9d77aR7UVJcC1fVJHNdi6vuZkrcwmJy1zQLfTp/Ikx6wXnv520V0twfhFd1IDg1R3/3WrloXmQAJJp5vSl3Tj6Bb/qw+BFETFrFkqS0Wsz6O2JauWgToRQnmK1qaXAI79Rp+6R5RADNG0WVZXcZy/uodE9bl2DhF/bO+Hy5swjvw35p5GkTE5wN0sV1Jorca/lE8KVG8eEyzbbobKlyD77Bee7nbSH6sIpVhfU/Go4r76ZJWJFisdMni/66ejcPP4FqOLH8RZCOWsMGZXaZzyvrIJqNR3HhEzGKPbv6dBw8Euqq8X8DBA0PxBf1NxqOK++gD9mW46K",
-  "a": "/dw="
+  "bench": 120
  },
  {
   "n": 6,
@@ -823,10 +846,7 @@ const QS = [
   "type": "TITA",
   "q": "In triangle ABC the angle at B is a right angle, and BD is the altitude from B to AC with D on AC. Given AD = 16 cm and DC = 48 cm, E is the foot of the perpendicular from D to BC. What is the length DE, in cm?",
   "opts": null,
-  "bench": 120,
-  "k": "888c624169ed04b071abaa6d1847a7f71bbee443e6e88ce64f596fd13cc8f8d0",
-  "m": "b62j6XbYt60vqXCPcv3hJaIDMTRp9wMzTteW+vsA1K4LnOyoWv+7zB7mMblS/eo59htwNm3pHzNMk4v2ri33/EqG56hszv6NA+59mDeexw/2AmJkf+weP0zSjbn6A5WoWYHi5n/Q8swuyFPTN4nrK6JLdi164AB2ZPbfo64t9/wWyMDMOIa3ryypLN0j5aNw9l0lZDGlQHYak8u3rjjduQuJ7/xxyOKICKljmHu89yO5BTEtYqUSdlLamPH6TMGuQont73TZt4sE/3SON5zBaqUaZCV+4Bd2HZO+3a4Y3LFOm6PJW5yqzFy/MYl+sOY59l0lZDGlQmYSh9O5/QOVnWnIvqgrjreNA+0xuVL9vmrlWTEwZegWJQCA0K2uUZXuH8Y=",
-  "a": "F7E="
+  "bench": 120
  },
  {
   "n": 7,
@@ -841,10 +861,7 @@ const QS = [
    "6 : 5\\pi",
    "6 : \\pi"
   ],
-  "bench": 190,
-  "k": "1f9c609ba79fe336c8aaa0bfd0cf043a7e553a8651e47772a074297ceae2d1fc",
-  "m": "Z2M4la5Rg24/ZAgw7xKLDF2q/23F04ujPx5mi4D1+SQTNn2A7VWDfm0yWzuuUc4RTL70LIeSxPcgEieZ0re+f0crKcekVYN9IWRbf+hAj14J6/R715LY5yxBI9TJ86lyQWIw0LlRnzp7L1tE5gXORQLpvT+Un9OjY1Rm2ICqq35SZTrZqBSZdThiE3X9QItND+L0Pp6X06NtRmbYgLqwZEdqM9aoFItoImxbca4Wi14Y76xtkoLD4mASMtaAqrFyE3g42KQZnX8/aBZ1+gWcDAHjujiE08LraRIpydCxqn5Hbn3GpFCINm12E3ntCM5ECfixbZCawOZ/EnCZzbe3YkAraJXwFNw2bTdbfecOm19MvvRw18GW4mJWZo+As7B5Rnh9hu0JzSlt4/uErgWWTQ/+uDTXh97mLEYuy8W7+WVSbzTc4xS+dW11E3WuFIZeCe/0PZia2Pd/EinfgL22eUdqPsHtVZ9/bXUTda4JgE8F+LchktTFo3hdM9rI/ql4WmUpxuEUjHQpIQ9460CNRR7puCjXh97xY0ch0YCqsXJeKzTG7UCFezkhEn7tCZxPAO/6bb6HxaN+UyLQ1a35fkArPMeoVc11O2QJMP0Fg0VB+rE/np7T92lAZoSA6PYhEzZ9hOEUnnVtaA9jrgGcSQ2qvT7Xg9+jbVwimdS2vDdBaincohSEaW03WyquEIcC",
-  "a": "5j/NInMCzQ=="
+  "bench": 190
  },
  {
   "n": 8,
@@ -854,10 +871,7 @@ const QS = [
   "type": "TITA",
   "q": "The area of a rhombus is 240 square cm and one of its diagonals is 14 cm longer than the other. What is its perimeter, in cm?",
   "opts": null,
-  "bench": 120,
-  "k": "de3c993d0d2adf72896272d6d7a97f2885c4de17a2b3c8bda9fa08645ba20a9b",
-  "m": "+DvJyRU57ETYcz+z9c1I/n9ofqvSik7E8aUS0qDXpanJcsnJUDT3Bc9uPrbs3Ry6Nnow/cbeQs+i+waaoMy1sM4g2MUVdqUUi3hxMBEsSK5nOTDy0t5Ojr/wBpqgguT0mXyd9V04pUHWfTa9998E6X9oYqrS31jPsPpC3rOP6uX7OtjYFT/sVtp/JfL83wvyf2Zkp5ecTo6ltFSX59ew5c482s1QLqkFzHNxpvHbSPI+ZXbilocPiL76R5Lzn/zlzjzZgQRopUTNeXGm8dtI9jpuY++diE6O8eZPmejL5LHdO9zPUjHgBch0PqH8ngDjL2ZkqpybHYrx/VXe9Neh5dw72cQVMuMFy3Q08uvWB/c9fGPj0t9ZwfHATpugz6G3xj/Y1VAvpUzMPGXy7dcF/ywpIfjS007Z6bo=",
-  "a": "3cQ="
+  "bench": 120
  },
  {
   "n": 9,
@@ -867,10 +881,7 @@ const QS = [
   "type": "TITA",
   "q": "The three edge lengths of a cuboid are in arithmetic progression. Its total surface area is 376 square cm and its volume is 480 cubic cm. What is the square of the length of its longest diagonal, in square cm?",
   "opts": null,
-  "bench": 150,
-  "k": "6ac20ac1f61d72a65e347a25a8444b68a1b259400ec1fcbbbe642e0c9d67c7ae",
-  "m": "4B+bnAbNispbzcVUXlOzisx3Jqsoyz2K0jYqP8SAv+TTTZPISM2ajB65yFUZRbXYy2VlryhIx32TcmF208WtqoVNhoEOiI2CFt7BEEpHtcvfYWLq6qEnOJZydW7Qwazv00TS1UPeyZQSzdNfGVLg2dxxZ7htTZUl0mFnP9bRq+vFCJbIgWVsgg/VmB4ZYqjPjXJppn1E0DiVO3B61oC/qsMEn40QzdbDHp7RRVhEpc6N5o5YKE2Va4MnZ23AxPeqik3G0FPD3vFLj9NEUEK13sRqYep8QdA4lDt0bNGAt+TDAtKcC4je0VuOz15dFqfD22F16mkJ1m2QN2I/RyhMqo5Zk8hIzcyWDs2dEAka4N3Fa3WvKEbbdItydHDK1P7m0gyEgQ2K3sYentFFWESlzo10ablhXdxul3JvbIXB/reXVd7IC4iQwVvNxBAEFvKKzGpi6nxB0DiXNmF61oC/+NJNxMRD1d7DUImAAQkY4P7FYSauYUjSd5wzaj/W0avrxQiWyAqe3pEIzYsQDwLggY01NvooFJUqwmIo",
-  "a": "r7KA"
+  "bench": 150
  },
  {
   "n": 10,
@@ -885,10 +896,7 @@ const QS = [
    "16 : 1",
    "100 : 1"
   ],
-  "bench": 150,
-  "k": "45309b7bcd5021307a8021939596ff79b8645b16e636fe7561d9aee5e23a3ed5",
-  "m": "XSDcyIBnXRlAQlLZ6X431UB2OmfxUJV8JFtgyBehXk48Ze+blHtcXSIEU9/wfheNQDN9M+EM2iZlHiPEZ7tRLiBl3NWRNQldD0IA98ZwVrwBYToioUGIdCZDdoRn7gtrY2XS3ZM1WV0UVknX6jkanEBxO2+4TJtnalt8yAbPPTMwNtKbgX1XDgUERtnxLFaNEmszbLZMn2ZqR3KeIq0fbXUkzpucexgJCEEAxOUqH5ZAM3I48RnaL2ocJch9rU8vIGud751wGBsPUVKW9jsRkA9sISKwUp81Pkd2yDT4HXx1Ns7Sg3AYGQlCRtP2OxiaBXF+IuAAwDVyDynIdbpeJTBziZXVQVAYQEhBxOM7BY1Adj0ipUifNTlCcoQr6A1rMCzOm8MhGEdAFQ4=",
-  "a": "i4k7kc8S"
+  "bench": 150
  },
  {
   "n": 11,
@@ -903,10 +911,7 @@ const QS = [
    "64",
    "\\frac{320}{3}"
   ],
-  "bench": 120,
-  "k": "a9ca8369785c26d794a01ff0a5f3030fc149a95c580da3fa6308f0b67b067dea",
-  "m": "QJj7tiXA9D2CYIOptbHxgv20DpWuCbtcUNBHTip8Q2tngev3NMC6O59q18b6vqKTrPAOnK4Uuk4ehRZCfmBOKmDQ9+Vmk7ZplnfMi7Ws6se8o0aetR7hHW6TSx1+YE4uNIDx+iOF9S/QROHKtavtgtOQDsznCO9OT8ZDHDtwBiRiley2Ms37PdBhypXhuezB+eAT0fZK/xIIkx9OayQJeDjQ//gihcppnGzGlbW37ILoqEvRoRu9HU3aRgt+e0BrVbK+8DTK92m/JcKK+rblguioS9G0G6JYHsNHHC5xSC99k+v6J9e0aaRtxsb9vevF9LQOnqFau09X0kwJMnEGG1Wyvvckyuws0EThxvyropes7x3RqhOhSE2TFE5jNBV5O8OytjXKuj2YYIOH573jgvWzDpmmFqkdUdUCX2g0UiJ5le22dZe1etwl1I78u+qC9bMOw/JM4A4Q",
-  "a": "x+qHptVb7hiToXnSxg=="
+  "bench": 120
  },
  {
   "n": 12,
@@ -921,10 +926,7 @@ const QS = [
    "\\frac{22}{3}",
    "\\frac{2}{3}"
   ],
-  "bench": 150,
-  "k": "e4a550c5b024fbdafced0a5ca98cdbfa84cb5b4a7f61e98839d3d778e3e23fcc",
-  "m": "ROO3zuQpvysWJjEshloM0v125ezj5ctGbo4TU32De7sggv7Jq2aSYhYkK22wDlSA9Sis/rutnUkrxkZTep9w9kXjt87kMqYhFiMsJIZKGoCyf6O4/+iOEXiWShVpnnn2QuOq0uQF/W5FOGQI1BNJiOk1o/i+o441doMcGnWWNKJopv7RrSi0PRYVAG2VQA2AnFyjq/77yxU5qUpOO9kg+TPv/onrdfhgFgM2JJVADsy4OcKO1K3GB2rPCwF+kDTkNO3+6bYvsCBROyE+1G8r5vE5worTrc8Ifc8oNV7RfLd2pv7ctiOwPRZmcmLHAkmS8iqjrfnpjlUrwFlfO4J79nG2v9m2L70vQjI2LJgOLeaYWqOl5K2cUjmCAx1ugjSiaKa3z+Q1pCMadzMlnU0BgLRqo/6lop1IOa4aA3eIfbhn46rVoWaiJlkyKCyXS0nGsmvuufvsjgJwnQ8Qb51t9nSs/vnoZpdiFhJkLJpKSeP9euyi8eTcC2rPWEE0wjo=",
-  "a": "5BAXCPfXMSa5Sfe6"
+  "bench": 150
  },
  {
   "n": 13,
@@ -934,10 +936,7 @@ const QS = [
   "type": "TITA",
   "q": "In triangle ABC, AB = 9 cm, BC = 12 cm and CA = 15 cm. A point P inside the triangle is at a distance of 1 cm from AB and 2 cm from BC. What is the distance from P to CA, in cm?",
   "opts": null,
-  "bench": 95,
-  "k": "40405455d9f584824e4db3d5ee32da29513bbee86664479ab668b70aaaf9472e",
-  "m": "hbVshgP/HlkjEIZRAqo2GHgYCs4SBde/dvC9CMG6bQiz/GuWRq1PD2tPiwFY+XpAPApZjxIzk/o36qtByaB5RLeuZ4RGtlVIa1rKBhbxcAVhCkySXxTM+me271yA4T5K9pZtjAi2SA8ja4YUWb5iTT0KTJNAFNr6IOG9Fcm3bxf2r3KJD6tVSEJ55UBf8GJKeF5QiVcUn64k7a4Px7hvF/araooVugYJcV7HExbtY0h4XlfbB0WT+iXr7wnBuGxEuboi3EarTwVmSIZRGr5mSS1ZGJNTHdn6OeLvUJL0fg27uXHFVPMGGG9O1UBe/3pDeEVe2wNEn64/6aoSgLAmRLOtd4QKrAZdNxWGNF7/YgUxWRjCElqf6GKk5EGR4W5E6/wz1V7zBhtsG5dVUr4rBW8fGJpcFZ++drnvVI4=",
-  "a": "1g=="
+  "bench": 95
  },
  {
   "n": 14,
@@ -952,10 +951,7 @@ const QS = [
    "\\frac{1}{3}",
    "\\frac{2}{7}"
   ],
-  "bench": 150,
-  "k": "9094456c5e648b5f0832e6389ceacc7f66576dad720f5fccba591b533b829121",
-  "m": "xX5y7VLUA8RY1c/zTYK5owaP48jivw7vWv/fxVavBYimPjO+HtQjil2Bq6cYx7H8WMawiKC/CukO1N+6VroWjLUmOq5WmibETcmKp1WG660YiuHN4/gL50O3l+YFskTS8HMzvwXaYrBRxIGnYMek7FzXqIG8tlnnQPPfwVavBYilPjO/Htpit1bNme5LgLm4HIOkzeXxHKZt0t/mEfNMzuZmM/pfkWKIUM+Kp2ehuasdkOHSrM9Zuw6/xqhBvgWUuiU6oBegMI1Yz4jrQMfbnDfG7MD/vzvFDvaMpxeyU8XnZnrtVphihljSiqdKgbmgEYjj1eS/TaoO9pHjVsIFyeYycvoXnC2WUNuA6VGG9ewQj/fV7fEa4w6k3+of/FDTtSs8uRfJYtULjtinQ5X2oVSP8I2s7BamR+OMpxfgQMG1e2CuX5UughnOiacRx+2lGYP3gb2tVrEOqt+1Qr0SjrVTYK5W1CSWWMKb7kqJuaMSxrWTrOsR51q3lvRWoAqXuw==",
-  "a": "iayDl2Dsc9BIndU="
+  "bench": 150
  },
  {
   "n": 15,
@@ -970,10 +966,7 @@ const QS = [
    "14",
    "4\\sqrt{21}"
   ],
-  "bench": 150,
-  "k": "106c7ff9e445d1cac18cef879df3e81ef62b248f283bd2c2e4c3aee6d5ea46fd",
-  "m": "OR586BXvvNG9O6myWMMs4+C9FtW5yfGANFzMZVq6W3YYF2utVvW8zK07qbJYnnm9p6QXm/2I8dpxUJh5V/tcJwQFOfBap7XRtnbmoBDKae7ipwqH7dfxiCkYmHlX/whkBRlrrFbotYO1fqizDMdpvLHpF4aoj7mMZw/JeF7oTScfGXa8Vui1g+gr9vQVxif49OlIwaTbpYEmCJhkTLoeK00Qa6cbp6fLvDulsRbbO+ip6TyQ65qkmiJczGVa4whmHxM5pxinvNOpdLW9DMpp/u6tG4ak26GcM1zMZVr3CGYZVjLwVua9x/n5TkZOjybjp70WkKiLtJs3GdZpVvldawwEObwe9bzWvnPmoBDKae7ipwqH7dXxvS8ZmGBW/l9mFFZ1oRji88qqO7K8HcFp7PPpVcSk26aBIg7dLUvyTScFF3WuW+S7zKt/5r0Ljz3l4ukNhP2ao4xnDtdiS7pHYU1HKfhW6rrNrGjm5VSPOuKnvRaQqJi5hjUYmGRMuhonGR90rQWnp8u8O7WlDc476Ke7EZr8276PZ0WBIR/tQG4OHjmhBaflg61yq7ELjz3l4ukNhP2ao4xnDtdiS7pHYU1HKOZW17/CunKos1jbIeinqhaa+p+iySgSmHlX/wh0DBt86AXut8b5cqinDMoo6ae+EYDkn/GZMgiYeVf/CGoEEm6pD6e/yrd+5rUMj36t5qca1e+Sp4xnTph5VvdNdE0Cca1W9KLWuGmj9ArAJvmnphjVvcr9yTAU0W5XukF0TQJxrVbzocKpNQ==",
-  "a": "+eNzSrkbMDDOTw=="
+  "bench": 150
  },
  {
   "n": 16,
@@ -983,10 +976,7 @@ const QS = [
   "type": "TITA",
   "q": "A cube of edge 12 cm has each of its eight corners cut off by a plane through the midpoints of the three edges meeting at that corner. What is the volume of the remaining solid, in cubic cm?",
   "opts": null,
-  "bench": 150,
-  "k": "b3102f3e67764b79efe7f6234f2beb802f103111062f454b2d6ef9375bf898b6",
-  "m": "WQy9X6hAIyt7GK/WsA/SCs7tRmgWbRXuz6FIcHAqotx0Aq1SqFc+LT4P6taqDcIYguAfPAN8Ff/CqkhrfDHuym5Nu1PvRiV/Ohivm+lZ1BTCrAl6U28I49KpSSJwKueLbwSmQ+ADOTl7XOrPthTSCs66RmgadAL8h/IMPz93tIU8KKhS+lp2Oj8Nr5uwH5cNhulGfwZ7Aq/OtwwzLWTuxHIK/lbmR3YzNBmvyP9PlxiarAN9EHFH6smgACJsK6LfdAj+UuFEPit7Cb/PrFnaHIv4RnkLeAT7y70MY2tk9sN5TbtT70Z2MjIOutS2F8MKzu0IeFN3CK/Ts0MicCKi33QIsxfnVTMtNwu6lf8t3xzO+glwBnQCr9WhQWN2KuvFe023RKgSYW1jSqfSsQzEWdasEnUefBSvlPIMPz91tZkkTbNe5lYlf2lS8pviWYZN2rxI",
-  "a": "hQmkWA=="
+  "bench": 150
  },
  {
   "n": 17,
@@ -996,10 +986,7 @@ const QS = [
   "type": "TITA",
   "q": "In triangle ABC the medians drawn from B and from C are perpendicular to each other. If AB = 12 cm and AC = 16 cm, what is the value of BC squared, in square cm?",
   "opts": null,
-  "bench": 190,
-  "k": "5d3c1ec7df86c673d809746332e6f5d8b5cc7c7b15fa026906b7ab12702f0602",
-  "m": "N9WSFZaOICZbFp4xfSkCZs4UcBwWkYg0fVM06oSvylUUz8ZBioNla10XmSRhNUtknBppHCDZjHp2AR6tn7SIVQbMiVuFxjFuXVOGIGwyBHCdVXBTQo2FcTJMNOmdro8bE9PGWoTGBEUYEp4hLwcpLM4idlUWkINzMlU14p6kxhwJgJJQkIs2JlcV0DFnI0tygQZtSAuWgzRkRD75grOVVQjGxnTOxgcmWR2UZUxmCmyKVXdZFo2EenUBKeWIqJRVA8+SFZKUKmJNEIRleylLeIsHaxwQnIlhcUQurZmuxgEPxcZGlocrYlkBlGV9IwdjmhxrUkK4rzRhUCjsn6SCVUyAp3bClTRzWQGVIS97SzfOAW1RB4rNVlEBLvyYoJQQA47GfYeUICYJR8RlJGZZN9hVORxWyd04MlIyra+CxgYW1YdHh4JlOxhLwGsvB0thgRp2WAuXjGB3AT7liKKNVQTPiFOLlCh1GAeYIC8yHG3OGGFYC5iDZzJAL+jNsYMHF8WIUYuFMGpZAdxlbigPIqw2JAFCzc1ge0w4/s21jhBH05dAg5QgJkocnzEvKQ0i21kkXQCWmGAyGXO02e3GBgbUj0aEjyB1GAeYIC8yGWuPG2NQB9mEendQKOyBqJIMR9ePQYrGdDQYEp4hL3ddLA==",
-  "a": "kzE="
+  "bench": 190
  },
  {
   "n": 18,
@@ -1014,10 +1001,7 @@ const QS = [
    "35",
    "44"
   ],
-  "bench": 150,
-  "k": "73097597c99a0eae105739e116d54f7a8be532a139694e534694ea869c29653e",
-  "m": "EA01lnGSBMrA8gA5v+dsAjrzHbUfNsnDAYZ9BxFJc6AgFiSbItxFxcq1DXyvqHIbNO9JuBg3j8cHwyJWREl4o2dRYZo0m1bOy+ZAfLivelYo9AT8GCLJk0eWIhVRBWK2Z1FhijiRQdiO+0Qy7CWX5HuwQPNDfcnDG8JsQUkAZOUqETKKcZlV3s/5THSi5/3+yaFb9VElgM8Q1WwEGVk55RMMIIpxjkHP2/YJL+yzcFY1oRqtBDCbxxGGrr2zSSXwKURq3mDIEIuTtVxw7KB2ADLvDvwfcdSCTIYjRwEHN/hnVXfQcbpL2Y77TGHs9ilWL+kM/B0wm8UQ1TgVQAdwqSJENpEkkECLzPBMbf73P117sFz8BTiExwaGeRUcSSb8ckQlmzaOQc7duUw1obdwBSjoC7AUcYDMVcdsVk4HYaA/RDGRPYVDxMC5TC+j53FWZqFQ8lEFgcdVyDlYQwxl5SgCYZo4nUPEwPQAL+yubFZioR21HDSagkOGKFxXAHOgI0Qjh3HOBJaOp1ty",
-  "a": "yv0="
+  "bench": 150
  },
  {
   "n": 19,
@@ -1032,10 +1016,7 @@ const QS = [
    "\\frac{35}{4}",
    "9"
   ],
-  "bench": 120,
-  "k": "5bec51bb6eea7a26ef3e91c38a7f0ef678af6085356e532df2d2b5b71cd28cdd",
-  "m": "IqLrl/DD6MVc/742W3+p0Y/a6u+dk30KE350YB2AU74JtL7EsZfj2VDhsjhbfb3JmIj365nHaAoddiFTHc9QvUS58dKxh+LdWPy5NBd9/NWa3eLvj8dsEBcyJ0UEz1C9RLnx0rGT+dNb5rQhCC6z1svc6+bck28XUmI1WRucH7QC7fbH4Yz41Uv29yYSarnDxYjQ7NymW1gGezlVGs99n0TwufbTw//VUvakdThK/MCH3fCjvqQ4DBt/MUNJq377We2sl+WK5tlMs+B1C2Kpw8udo/eVin0LUiV0DUnYD/VEnvDZ8oar/Xyz6nVDIvzyr4i+o8vXN0BSL3QDXMAL9Q==",
-  "a": "+DEBMEnEzXOHqDae"
+  "bench": 120
  },
  {
   "n": 20,
@@ -1045,10 +1026,7 @@ const QS = [
   "type": "TITA",
   "q": "A circle has the points A(−3, 4) and B(5, −2) as the endpoints of a diameter. How many points on this circle have both coordinates equal to integers?",
   "opts": null,
-  "bench": 150,
-  "k": "6affe84c1f7aa1e80112e6b9e93c77725a5c409be7e786aef51cd8c3a4e13672",
-  "m": "rSdCXExL1m/jtysB/xOZjNzOrFRMzINuD6pospRIUcvVb1AURk3QO/ihK0C9H83VkMLhXEbYzHMJu2ivkwx5/IpvTg8PRtl39/JkDqxyr8iZmqlcXJyFdEG2KbGUSGThnG9UDVpPyn6xoGQH+BOCgpnY9R1Y0Jl0Qe1+8dIfeOCaJwcVXA6NNbGGYw2sUISW2oKkHUHPzC8Z/qpVYEghoNk8VglOXN1/saJnHf8TxZ2ZDEmvCI3FJxKvPbyADXSpxG8VSQEO72n4pmIG6xPf0ZmPsh1JnJ9yDP4nu9IcZ+bZPFYJTlzdaLG1Yh7pQM3WjM78HRicxydT62i8nAwwu8xvGlwWDpM7oOQnSP9czZDRi+FURsiJYASsaLKUDmPsjTwHGl1B1Tvlum5I71aDkMuL4Vxa2cwvEbI9rtIHYqmUJkkJXA6NN7HiIkSsG93ImZ6tSFucg3VBsyGzhxswvNBjB1RfQs1osb15SOFag5HKzvIRCMyAchL+J6/SBXnnjDwHSAYO2XX18iMY4EaexNac4VBB0pl0Qepk/YIEZfrZIFVcQkfWbuLyOEGiE7mM2JrhVFuc3idK/nr92UgkqdJvE1wSDokpsb5qHPhajoGZnq5URsifKQ==",
-  "a": "fVE="
+  "bench": 150
  },
  {
   "n": 21,
@@ -1063,10 +1041,7 @@ const QS = [
    "130\\pi",
    "120\\pi"
   ],
-  "bench": 150,
-  "k": "8e11f31c4231a568dd42dd0d34f2c071ab880e054fd1650b8e4d829b6af8dcfa",
-  "m": "3PqlUzFyp8ZNKMLD0ENPxY3Ji9gT0ITp+O3BdrA802+o4qwGNTq8wk0ox97LVRvZk8XfwxnQnvDqods5vybQb6j7s1N0LOiBCDmBkZ4UWIyKgJLVBdCD7Pyh3juyP9Eq6/2uFmFp5op+Z83Z00McjI2KntwT0Jb3ufXFM/MwyGjtsq8VZm6gzwhkyMLbRx2MjIiL2Rnc1/f2odk+siedeOnmqRxmc7uKGySBzdBCT8+Lm4nVEtCE8evnzDW2c9x47fOzUzV5qcZNKMDfnk8b396ajsUXgpKoubiDdoc72Cr7/6EfKjqrxUZtht+eRRreiIybkAWFheL44sh2uiCdO7un4AMvOqfcTXqBlZ4bT53LyY/ZWtCW6v2h2T62c9t4/eG0Bis9u4pBe4GdjRNP3JfJktkYhYSkqLSNJrpzgCq5oPBTNnPm",
-  "a": "q+2nlYKU"
+  "bench": 150
  },
  {
   "n": 22,
@@ -1081,12 +1056,10 @@ const QS = [
    "15 : 17",
    "6 : 23"
   ],
-  "bench": 150,
-  "k": "8f9c7d465dd374b3d06d5f895687cf1a2a51ecf6727738b2a6ee0df4c717d683",
-  "m": "Hl6NpORc9rILBwTS51FJD4SNRLgyt8r4yp2BUtfxlfcsUtm6pULk4QhIXpzyVkVt5qgK5jLBqbmDnfBezabOvjBCjYjAD7+yPitNgbMRRRXm+ETyZ4f6+JrcwAHN4Ia2KAfs6eRB4bJISAzIs2FLD5WqBe57ne74g9XWUpmmyfcvSI297Uql/xobHpzyVkVs5qgD8HeW+viQ1MUXnvHn92EHn+WlbaWvW1FBnNACWA/w50TWepbn+LOd0BOfo8+yLweU6a4Ps7JGSFyJvwIWQOamCqJmm+z4lNjFG4y/hpYYB9mh4A/38w8BApzSckUV5pkgonuAqenCnYlS3/+Ggy5OzKfiQ+CyOiopnPpRRW2C5ibBMs6p6tiIkx2L8eeVHwuNqOtLpeYJAQzS9E4AD4eZJqJ7gKmZp5LyNs3shuZpCJz+pUDjsjoqKZCzUQoPh5kmonuAqerYiJMGhLzDpHwWmOa0GKWvW15CjaQCCknmiCbBPA==",
-  "a": "9f5eHuFC"
+  "bench": 150
  }
 ];
+const SETS = {};
 const N = QS.length;
 
 /* Enrolled PINs as salted, iterated hashes — 16 hex characters each. This is the whole
@@ -1306,6 +1279,13 @@ const REASON = {
     'Tell your centre before you leave.',
   no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
   no_attempt: 'There is no completed attempt to review for this paper.',
+  stale_page: 'This page is an old copy held in your browser\'s cache. Press Ctrl-Shift-R ' +
+    '(Cmd-Shift-R on a Mac) to reload it, then tell your centre before you do anything else.',
+  no_key: 'This paper has not been finished being set up. Tell your centre now \u2014 do not ' +
+    'sit it until they say it is ready.',
+  offline: 'This paper was opened without the enrolment check, so there is nothing to mark ' +
+    'it against.',
+  unreachable: 'The IMS server could not be reached',
   no_report: 'That attempt was recorded before the review feature existed, so the full report ' +
     'cannot be rebuilt. Your score is still on your Quest Summit page.'
 };
@@ -1373,6 +1353,17 @@ async function doReview(pin) {
         { day: 'numeric', month: 'long' }) : '') +
       ' &middot; this paper cannot be taken again</span>' +
       '<a href="../">&larr; Back to Quest Summit</a></div></div>');
+    /* The answers and the worked methods arrive HERE, from the Worker, and only because
+       this paper has been released. They are merged into the stored report before it is
+       drawn; the file this page was built from never contained them. */
+    if (j.report && Array.isArray(j.report.per) && Array.isArray(j.key)) {
+      const byN = {};
+      j.key.forEach(k => { byN[k.n] = k; });
+      j.report.per.forEach(p => {
+        const k = byN[p.n];
+        if (k) { p.key = k.answer; p.method = k.method; }
+      });
+    }
     render(j.report);
     $('#res').classList.remove('scoreonly');   // reviewing: the whole report is open
     $('#r-gate').hidden = true;
@@ -1612,9 +1603,11 @@ function buildPalette() {
   const g = $('#palgrid'); g.innerHTML = '';
   for (let i = 0; i < N; i++) {
     const b = el('button', 'pb', String(i + 1));
+    if (QS[i].set) b.dataset.set = String(QS[i].set).replace(/\D/g, '');
     b.onclick = () => goTo(i);
     g.appendChild(b);
   }
+  paintPalSets();
   paint();
 }
 function paint() {
@@ -1637,6 +1630,64 @@ function paint() {
   if (lv) lv.classList.toggle('on', S.marked[S.cur] === 2);
 }
 
+/* ---------------- DILR set panel ----------------
+   Inert on any paper whose questions carry no "set": SETS is {}, renderSet() clears the
+   pane and returns, paintPalSets() writes an empty string. Nothing below runs for the
+   four QA papers. */
+let curSet = null;
+function TBL(t) {
+  const tb = el('table', 'dtbl'), num = t.num || [];
+  if (t.head) {
+    const th = el('thead'), hr = el('tr');
+    t.head.forEach((c, j) => hr.appendChild(elm('th', num.includes(j) ? 'n' : '', c)));
+    th.appendChild(hr); tb.appendChild(th);
+  }
+  const bd = el('tbody');
+  (t.rows || []).forEach(r => {
+    const tr = el('tr');
+    r.forEach((c, j) => tr.appendChild(elm('td', num.includes(j) ? 'n' : '', c)));
+    bd.appendChild(tr);
+  });
+  tb.appendChild(bd);
+  const w = el('div', 'dtblwrap'); w.appendChild(tb); return w;
+}
+function setBlocks(S0, host) {
+  (S0.blocks || []).forEach(bl => {
+    if (bl.t === 'p') host.appendChild(elm('p', '', bl.v));
+    else if (bl.t === 'ol') {
+      const o = el('ol'); bl.v.forEach(x => o.appendChild(elm('li', '', x))); host.appendChild(o);
+    } else if (bl.t === 'table') host.appendChild(TBL(bl));
+  });
+}
+/* The caselet is re-rendered ONLY when the set changes. Moving between questions inside a
+   set leaves the node, and therefore its scroll position, exactly as the candidate left it. */
+function renderSet(sid) {
+  const pane = $('#setpane');
+  if (!pane) return;
+  if (!sid || !SETS[sid]) {
+    pane.classList.remove('on'); pane.innerHTML = ''; curSet = null; return;
+  }
+  if (sid === curSet) return;
+  curSet = sid;
+  pane.innerHTML = '';
+  pane.appendChild(el('div', 'sp-h', SETS[sid].label || sid));
+  const b = el('div', 'sp-b'); setBlocks(SETS[sid], b); pane.appendChild(b);
+  pane.classList.add('on');
+  pane.scrollTop = 0;
+}
+function paintPalSets() {
+  const ps = $('#palsets');
+  if (!ps) return;
+  const seen = [];
+  QS.forEach((q, i) => {
+    if (!q.set) return;
+    const e = seen.find(s => s.id === q.set);
+    if (e) e.b = i + 1;
+    else seen.push({ id: q.set, label: (SETS[q.set] || {}).label || q.set, a: i + 1, b: i + 1 });
+  });
+  ps.innerHTML = seen.map(s => s.label + ' &middot; Q' + s.a + '\u2013Q' + s.b).join('<br>');
+}
+
 /* ---------------- question rendering ---------------- */
 function goTo(i, first) {
   if (S.ended) return;
@@ -1647,6 +1698,7 @@ function goTo(i, first) {
   log('enter', S.cur);
   const q = QS[S.cur];
   $('#qnum').textContent = 'Question ' + (S.cur + 1);
+  renderSet(q.set);
   $('#qsub').textContent = q.sub;
   const ty = $('#qtype'); ty.textContent = q.type === 'TITA' ? 'TITA · no negative' : 'MCQ · +3 / −1';
   ty.className = 'chip' + (q.type === 'TITA' ? ' tita' : '');
@@ -1914,16 +1966,15 @@ $('#calcclose').onclick = () => calcShow(false);
 })();
 window.addEventListener('resize', () => { if (CALC.open) calcMove(CALC.x, CALC.y); });
 
-/* ---------------- grading ---------------- */
-const keyCache = {};
-function unveil(b64, key) {
-  const kb = keyCache[key] || (keyCache[key] = sha256sync(key));
-  const raw = atob(b64), out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i) ^ kb[i % kb.length];
-  return new TextDecoder().decode(out);
-}
-/* synchronous SHA-256 — used to unveil solutions, and as the digest fallback
-   wherever crypto.subtle is unavailable */
+/* ---------------- grading ----------------
+   There is no grading in this file any more, and no unveiler to undo. The page ships the
+   questions and nothing else: no answer, no answer hash, no worked method. It learns
+   whether an answer was right only after it has sent that answer to the Worker, and it
+   learns what the right answer WAS only from action=review, which the Worker refuses
+   until faculty releases the paper. Anyone reading this file in the console finds a
+   question bank. */
+/* synchronous SHA-256 — the digest fallback wherever crypto.subtle is unavailable, and
+   the basis of the enrolment PIN hash */
 function sha256sync(msg) {
   const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
     0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -1975,18 +2026,13 @@ async function sha(s) {
   }
   return hex(sha256sync(s));
 }
-async function grade() {
-  const out = [];
-  for (let i = 0; i < N; i++) {
-    const q = QS[i]; const a = S.ans[i];
-    let correct = false, given = null;
-    if (a !== null && a !== '') {
-      given = q.type === 'TITA' ? String(parseInt(a, 10)) : String(a);
-      if (given !== 'NaN') correct = (await sha(CONFIG.SALT + '|' + q.id + '|' + given)) === q.k;
-    }
-    out.push({ correct, given });
-  }
-  return out;
+/* What the candidate actually put down, normalised the way the Worker will read it.
+   TITA is compared as an integer at both ends, so it has to be one at this end too. */
+function givenOf(i) {
+  const a = S.ans[i];
+  if (a === null || a === undefined || a === '') return null;
+  const v = QS[i].type === 'TITA' ? String(parseInt(a, 10)) : String(a);
+  return v === 'NaN' ? null : v;
 }
 
 /* ---------------- per-question time from the event log ---------------- */
@@ -2015,9 +2061,25 @@ async function finish() {
   if (CALC.open) calcShow(false);   // don't leave it floating over the report
   log('leave', S.cur);
   S.endT = clk();
-  const g = await grade();
   const segs = timeline();
-  const A = analyse(g, segs);
+
+  /* The page cannot mark its own paper any more, so the order here is inverted against
+     every earlier build: send first, analyse second. Everything the report draws — the
+     colours, the ribbon, the triage, the score itself — hangs off verdicts that only the
+     Worker can produce, because only the Worker has the key. */
+  const pre = analyse(null, segs);          // telemetry only; correctness is not read
+  showSending();
+  const j = await sendAnswers(pre, segs);
+
+  if (!j || !j.ok) {
+    /* The answers are parked and will go the next time this paper is opened on this
+       machine. Nothing is lost — but there is no score to show, because there is nobody
+       here who knows the answers. */
+    showUnsent(j);
+    return;
+  }
+
+  const A = analyse(j.g, segs);
   try {
     localStorage.setItem(LSKEY, JSON.stringify(
       { pin: S.pin, startedAt: S.startedAt, score: A.score }));
@@ -2027,17 +2089,48 @@ async function finish() {
   $('#res').classList.add('scoreonly');
   $('#r-gate').hidden = false;
   show('res');
-  sendAttempt(A);
+  afterSend(j, A);
+  sendReport(A);                            // best-effort; Review needs it, the score does not
+}
+
+/* The wait between pressing submit and seeing a score is new, and on a 40-minute paper it
+   is the only moment the student has no idea what is happening. Say so plainly. */
+function showSending() {
+  show('res');
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = true;
+  $('#scorerow').innerHTML = '';
+  $('#r-title').textContent = CONFIG.PAPER_NAME;
+  $('#r-sub').textContent = (S.name ? S.name + '  ·  ' : '') + S.pin;
+  $('#r-banner').innerHTML = '<div class="banner"><b>Sending your paper to IMS…</b> ' +
+    'Your answers are being marked. Do not close this window.</div>';
+}
+
+function showUnsent(j) {
+  const why = (j && j.reason) ? (REASON[j.reason] || j.reason) : 'the server could not be reached';
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = false;
+  $('#r-gatemsg').textContent = 'Your answers are saved on this machine and will be sent ' +
+    'automatically the next time this paper is opened here. Tell your centre before you leave.';
+  $('#scorerow').innerHTML = '';
+  $('#r-banner').innerHTML = '<div class="banner err"><b>Your paper has not been marked yet.</b> ' +
+    why + '. Your answers are safe — nothing has been lost — but the score cannot be shown ' +
+    'until they reach IMS.</div>';
+  const rt = $('#retry');
+  if (rt) { rt.style.display = ''; rt.textContent = 'Try sending again'; }
+  show('res');
 }
 
 /* ---------------- analysis ---------------- */
 function analyse(g, segs) {
   const per = QS.map((q, i) => ({
     n: i + 1, id: q.id, sub: q.sub, rate: q.rate, type: q.type, bench: q.bench,
-    t: 0, visits: 0, correct: g[i].correct, given: g[i].given,
-    answered: g[i].given !== null, marked: S.marked[i],
-    method: unveil(q.m, CONFIG.SALT + '|' + q.id),
-    key: unveil(q.a, CONFIG.SALT + '|A|' + q.id),
+    /* g is the Worker's verdict list. It is null on the first pass, which runs before the
+       paper has been sent, purely to assemble the telemetry that gets sent. Nothing that
+       depends on correctness is read from that pass. `method` and `key` are absent by
+       design and are attached, if ever, by doReview() from the released report. */
+    t: 0, visits: 0, correct: g ? !!g[i].correct : false, given: givenOf(i),
+    answered: givenOf(i) !== null, marked: S.marked[i],
     firstAnsAt: null, changes: 0, hadRight: false,
     calcOpens: 0, calcKeys: 0, calcSecs: 0, calcTyped: 0
   }));
@@ -2493,9 +2586,24 @@ function drawTable(A) {
     const mr = el('tr', 'mrow');
     const mtd = el('td'); mtd.colSpan = 12;
     const mv = el('div', 'meth');
-    const ka = el('b'); ka.innerHTML = 'Answer: ' + MATH(p.key) + '.  ';
+    /* p.key and p.method are attached by doReview() from the released report and are
+       absent everywhere else, including on the screen a candidate lands on the moment
+       they submit. There is nothing to hide with CSS because there is nothing here. */
+    const ka = el('b');
+    ka.innerHTML = (p.key === undefined || p.key === null || p.key === '')
+      ? 'Answer and method are released with your report.'
+      : 'Answer: ' + MATH(p.key) + '.  ';
     ka.style.color = 'var(--ok)';
-    mv.appendChild(ka); mv.appendChild(elm('span', '', p.method));
+    const qq = QS[p.n - 1];
+    if (qq && qq.set && SETS[qq.set]) {
+      const rc = el('div', 'setrecap');
+      rc.appendChild(elm('b', '', SETS[qq.set].label || qq.set));
+      setBlocks(SETS[qq.set], rc);
+      rc.appendChild(elm('p', 'setq', qq.q));
+      mv.appendChild(rc);
+    }
+    mv.appendChild(ka);
+    if (p.method) mv.appendChild(elm('span', '', p.method));
     mtd.appendChild(mv);
     mr.appendChild(mtd); mr.style.display = 'none'; tb.appendChild(mr);
     b.onclick = () => {
@@ -2513,6 +2621,10 @@ function drawTable(A) {
 }
 
 /* ---------------- backend ---------------- */
+/* What goes up when the paper is submitted. It carries what the candidate DID — the
+   answers they gave, where the time went, what they flagged — and nothing about whether
+   any of it was right, because this page does not know and must not be believed if it
+   claims to. Score, correctness and the negative marking all come back from the Worker. */
 function payload(A) {
   return {
     pin: S.pin, name: S.name, paper: CONFIG.PAPER_ID,
@@ -2521,10 +2633,12 @@ function payload(A) {
     /* The full paper clock. Triage is scored against this, not against how long the
        candidate chose to stay — the minutes they left unused are part of the account. */
     clock: CONFIG.DURATION,
-    score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
-    wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
-    q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
-      a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls,
+    /* rho is the order questions were taken in against how hard they were rated. It needs
+       no key, so the page can still compute it. Everything alongside it that DID need a
+       key is gone. */
+    rho: A.rho, gap: A.gap, resumes: A.resumes,
+    q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, g: p.given,
+      a: p.answered ? 1 : 0, ch: p.changes,
       /* f: 0 none, 1 come back to this, 2 leave this one. r and b are the authored
          difficulty and pace benchmark — carried so the backend can blend its observed
          estimates toward them without holding a copy of the question bank. */
@@ -2532,15 +2646,27 @@ function payload(A) {
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
-    /* The whole analysis, stored so the student can review this report later. The event
-       log it was derived from dies with this tab; this is what survives. */
-    report: A,
-    ua: navigator.userAgent.slice(0, 120), v: 1
+    ua: navigator.userAgent.slice(0, 120), v: 2
   };
 }
-let lastPayload = null, lastA = null;
-async function sendAttempt(A) {
-  lastPayload = payload(A); lastA = A;
+
+/* The report follows in its own call, because it cannot be drawn until the Worker has
+   graded. It is presentation only — the score, the rank and the triage were all settled by
+   the grading call — so it is sent without blocking and its failure costs only the later
+   Review screen, which is behind the release gate anyway. */
+async function sendReport(A) {
+  if (!CONFIG.ENDPOINT || S.offline) return;
+  try {
+    await fetch(api('action=report_store'), {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ pin: S.pin, paper: CONFIG.PAPER_ID,
+        startedAt: new Date(S.startedAt).toISOString(), report: A }),
+    });
+  } catch (e) { /* Review can be regenerated; a score never depends on this */ }
+}
+let lastPayload = null, lastA = null, lastSegs = null;
+async function sendAnswers(pre, segs) {
+  lastPayload = payload(pre); lastA = pre; lastSegs = segs;
   return postPayload();
 }
 /* Attempts that could not be sent are parked here and re-sent the next time this paper
@@ -2580,11 +2706,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function postPayload(manual) {
   const B = $('#r-banner');
   if (!CONFIG.ENDPOINT || S.offline) {
-    B.innerHTML = '<div class="banner">This attempt has <b>not</b> been sent to IMS — the ' +
-      'paper was opened without the enrolment check, so there is nowhere to record it and ' +
-      'no batch comparison. Everything else on this page is your real result. Use ' +
-      '<b>Download my attempt data</b> to keep a copy.</div>';
-    return;
+    /* There is no local fallback left: the paper is marked by the Worker, so a page with
+       no Worker to talk to cannot produce a score at all. This only happens on a build
+       with no endpoint, or a deliberate OFFLINE_FALLBACK sitting. */
+    return { ok: false, reason: 'offline' };
   }
 
   /* On an auto-submit every student in the room finishes in the same second. A short
@@ -2610,29 +2735,18 @@ async function postPayload(manual) {
 
       if (j && j.ok) {
         unpark(lastPayload);
-        B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
-          'color:#1B5E3F">Recorded' + (j.practice
-            ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
-          (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
-            ' now sat this paper.' : '') + '</div>';
-        applyRank();                               // its own call — see the note there
-        /* If faculty released the paper before this candidate finished, the backend has
-           already scored them on the way in and Review can open immediately. */
-        if (j.triageReady) openReviewButton();
-        renderTriage(null);                        // shown in full behind Review, not here
-        if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
-        $('#retry').style.display = 'none';
-        return;
+        /* Hand the verdicts back to finish(), which cannot draw anything until it has
+           them. The screen work waits for afterSend(), once the report exists. */
+        return j;
       }
 
       /* A refusal is a decision, not a glitch — the roster said no. Retrying cannot
          change the answer, so stop. */
-      lastReason = REASON[j && j.reason] || (j && j.reason) || 'unknown reason';
-      B.innerHTML = '<div class="banner err">IMS did not accept this attempt (' +
-        lastReason + ') Your result below is complete, but it has not been recorded. ' +
-        'Tell your centre before you leave.</div>';
-      $('#retry').style.display = '';
-      return;
+      /* A refusal is a decision, not a glitch — the roster said no. Retrying cannot
+         change the answer, and since the paper is graded server-side there is no local
+         result to fall back on, so this comes straight back as a failure. */
+      lastReason = (j && j.reason) || 'unknown';
+      return j || { ok: false, reason: 'unknown' };
 
     } catch (e) {
       lastReason = 'the server could not be reached';
@@ -2647,13 +2761,47 @@ async function postPayload(manual) {
 
   /* Out of tries. Park it — it will go the next time this paper is opened here. */
   park(lastPayload);
-  B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
-    'is <b>saved on this computer</b> and will be sent automatically the next time this ' +
-    'paper is opened here. Your result below is complete and correct. You can also press ' +
-    '<b>Retry</b> now.</div>';
-  $('#retry').style.display = '';
+  return { ok: false, reason: 'unreachable' };
 }
-$('#retry').onclick = () => { if (lastPayload) postPayload(true); };
+
+/* Everything the success screen does once the report has been drawn. Split out of
+   postPayload because none of it can run until finish() has the verdicts and has
+   rendered — applyPeer writes into table cells that do not exist before then. */
+function afterSend(j, A) {
+  const B = $('#r-banner');
+  if (B) {
+    B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
+      'color:#1B5E3F">Recorded' + (j.practice
+        ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
+      (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
+        ' now sat this paper.' : '') + '</div>';
+  }
+  applyRank();                               // its own call — see the note there
+  /* If faculty released the paper before this candidate finished, the backend has
+     already scored them on the way in and Review can open immediately. */
+  if (j.triageReady) openReviewButton();
+  renderTriage(null);                        // shown in full behind Review, not here
+  if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, A);
+  const rt = $('#retry'); if (rt) rt.style.display = 'none';
+}
+
+/* Retrying a paper that never reached IMS. On success the whole report appears for the
+   first time, because until the Worker answers there is nothing to draw. */
+$('#retry').onclick = async () => {
+  if (!lastPayload) return;
+  const rt = $('#retry');
+  rt.disabled = true; rt.textContent = 'Sending…';
+  const j = await postPayload(true);
+  rt.disabled = false; rt.textContent = 'Try sending again';
+  if (!j || !j.ok) { showUnsent(j); return; }
+  const A = analyse(j.g, lastSegs || timeline());
+  render(A);
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = false;
+  show('res');
+  afterSend(j, A);
+  sendReport(A);
+};
 
 /* Rank comes from its own uncached call, never from the peer blob: that blob is filled
    before this attempt is written, so during a big simultaneous sitting it would rank a
