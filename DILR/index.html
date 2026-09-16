@@ -761,7 +761,12 @@ const CONFIG = {
   PEER_MIN: 30,          // real peer data replaces the model at this many attempts
   BLEED_AFTER: 45,       // seconds on a blank question before it counts as bleed
   SUNK_AFTER: 120,       // seconds on a wrong question before it counts as sunk
-  SEND_JITTER: 20,       // seconds of random spread on auto-submit, to flatten the burst
+  /* Seconds of random spread on auto-submit, to flatten the burst of 300 papers arriving
+     in the same second. It used to be 20, which was free because the full report was
+     already on screen while it ran. The paper is now marked by the Worker, so this is
+     time the candidate spends watching a message instead of a score — cut to four, which
+     still spreads the burst to well under a hundred a second. */
+  SEND_JITTER: 4,
   SEND_TRIES: 4,         // send attempts before the payload is parked for a later retry
   SAVE_EVERY: 4,         // seconds between crash-recovery snapshots
   RESUME_MAX: 24 * 3600  // an unfinished attempt older than this is dropped, never offered
@@ -782,10 +787,7 @@ const QS = [
    "C",
    "D"
   ],
-  "bench": 190,
-  "k": "111c166ce02221bcffe8270e85596b86999c103dee3b5c001413835b464afeac",
-  "m": "cMS2LbMDp+7luz7+2eyMFvSW4ggkvRtLX9IOXi8STQVW2PNkrUK69KDerx8nz4wW+JHiQT+kWEtI3FdoLxpOREvC80CsDKr9vN6zDGr+2QDuhvBRfuojBEnYHkNoU0kMVsOmaqtCrPOxlvBeL9LNBumO6Ag2pQEZG9cWVCIDXBBQyaFjsEK96beItQgvhowE84axaXCrGg8b8VdAbgodF1PNoy20C7r0rJD8CiLPxRe9kflJIq8QS1/SDgEvFFQSTcK0LaYLqfSx3q8dIs/IEPGH4gZwjlQKS8MSTH0AHQtKwKotrAzu0aqQuB8zisMXvbbkTSOuFRIb2hkNagVYFl2MvGOmQqH65Yq0GyeEjCSxwtMIMaQQS3iTEkxsGx0LR8+mf+MNoLySm7gQL9nIBOTC+EZwqwBLV9YWXntTUgpBjKBuqweq6amb8g==",
-  "a": "Bg=="
+  "bench": 190
  },
  {
   "n": 2,
@@ -796,10 +798,7 @@ const QS = [
   "set": "S1",
   "q": "How many complete schedules satisfy all the conditions?",
   "opts": null,
-  "bench": 120,
-  "k": "31db609c812f1fec36d9ba91c45c7bee208aebde8215a9b7dc1b2af3b43b6b09",
-  "m": "xkelBHYss20k9W8FZfI58zflCXZoJ/TgmKQTT63yXNvjR74SPzy7e2erLiZj/j/0KqJacn0t76aF5Q8ZqfMFlu9avh84L/40aON6FGP5JPIq/1pacyCnx87GWhmc9UDbxAWVWnYft3ApxiM2Pbcf9THlMjpadafLjupWfeXFCdvUXbVWF2eQOCnSaxUx0GbbaOUuf2luxKupv1Z0p+4Fv61v/FYCPbc0QahLXTHALvlkhFVVMG7T7pSkNRSOuwW270bwMXsM/jRd8GtRVLoDsWSSH3M8D6jEzaQiUb2gY9bDBvA/OGi3dWrtIlFQtyrzIOU4N38v6aaD4VZWuuRAieVM8AIhJ/JjaPx9XTHkJL1w5SZjdSPi9cG2VgTouAs=",
-  "a": "IA=="
+  "bench": 120
  },
  {
   "n": 3,
@@ -815,10 +814,7 @@ const QS = [
    "C is conducted on Thursday afternoon.",
    "D is conducted on Monday afternoon."
   ],
-  "bench": 150,
-  "k": "34df85a358d0e767b5150ce149d5e381c36f179798209ff3fcf3ab6980e06c54",
-  "m": "mF1DtwHF/4ervInmn2RCKUflHU59KI+quLDODky2jNe4Eka3RNb7l7qq28DMNwxER+VRc3ACze/Mqs0OefGr2/4qVqFE4bel4u/9xsotbyRgp1FANSKTqriZiEdL/r6SuhNWtgDH48Ovqd3LzWNDZkarEFk5Z6nvzLfdXEu6iI7+HFWxAdT0jKGhh472Ywx9QOoFFy0mlbv9rcYOf/6AhP4SXeUzw/6Nq7zNz8YtQWZa5RhZOmnBjri22w5XsMmjqxhAoQXfuoG7u4nD3nQMa02rGFl9Ioi78LraDku7moS3El3pRNX1w7qnyNqfflhoXO4cUjMzwabr/8ZBTP6PmKweVqFIhvuNqu/dxtotXmxF6hhZNCmG7+yoxw5ZrIzXuBxftgGG7ourvcyA",
-  "a": "P9y19sy4hFzK7JlQhjBP2W7+aK85hTpgO3Blif8gqxQRkrur"
+  "bench": 150
  },
  {
   "n": 4,
@@ -829,10 +825,7 @@ const QS = [
   "set": "S1",
   "q": "How many valid schedules have both G and H conducted before A?",
   "opts": null,
-  "bench": 120,
-  "k": "dedfbeb6fae4fe9faf3e4765a08b453b82fd935620b0936c609d6b99e57dbfdb",
-  "m": "gpZenmOtt2zIjXqWMhRnjqr+jZgHPkwNl/0PJMHFdxet0x+EcOLfPMuWeptgCmbLvfOIiQcPAAOa9FZFiMo5B+X0H59pragpzoxrjXYFbNHp1oaTBztBJdWxInHNix9OgJZenmOtsiPEwknTVkg1v7z+ybgKN0JCvPAVbIjKMw6swkzQc/qQbMWQaptgFzWEr7uo3UYRCEK7vVZjwd0+DaKWDdBb+ZYhz5EuzDJZNd/n",
-  "a": "hw=="
+  "bench": 120
  },
  {
   "n": 5,
@@ -848,10 +841,7 @@ const QS = [
    "E is conducted in the morning.",
    "H is conducted on Thursday."
   ],
-  "bench": 150,
-  "k": "94e463d3e971aea98bfbad45fa367194564e740405415c289510b586cc7d21aa",
-  "m": "TgPHo7X7UKyNDzDnNbUeid1g7PKHHAvp54Xp30blsx9gEtHqqP8YK2niHaIk/FgEL52EkArysp3jlfraR/fqm4/+g6y06QJiLfYfo3cy+H7qJaXeRej6rKuN59tN//0e7ec66q/rH2Atxx2mNLkWgY9H7N8LvMa87pPsyFq2/hZ9CcqkvLwDK2HyErMk8AyOyiW80RHo97vlwMXGTbbXVEpLg56u+VAPItVd5wC1HMboKIqcRcj6vKujpeED9/0dLwHMuLj5A25MtxipI79Ystpgv9QE5bKo7ZTt2035/BcjR8+vuuoZIGq3FL82swyK1iWj3gC84arjhezcT/O9",
-  "a": "0eV9ttGX8g7JAebiKQRHzG5AdaDqBn5w/Hf7Zw86Ut706w=="
+  "bench": 150
  },
  {
   "n": 6,
@@ -867,10 +857,7 @@ const QS = [
    "₹600",
    "₹800"
   ],
-  "bench": 190,
-  "k": "61245681eff93585f383cf1ffd939156d1be19fa2def1f2ab2a2c2e87179a527",
-  "m": "avY8qdIs+uLOCBRTTE/4RVmeeoShhdeyOj8DNXdqUJkW/WHt0ijg7o0ZDwEYGuhHENA/xvSU16c7PEZwLz8K2FXwJKXSaL2r2AMOBw5fp0JV/2eUotLXvDJ7YSQmNBzYCa9orpR8y6eNGggBCRfoxvcHfI2918fjdDJNJCY2FNYdzCfhxmnpq4ZNVEYfX+MEQY5j1bqF3vNpexQ9d3ZYjFX+POGbL6i6mgxHWF1O/UZVg2uFpN/Z8wcyTWcieknNX78hstI9qObYARMaDROtBBrYa4Wkx5a9MHsSMX96FJ1c6S2y0mSo5MNNAxoLFrtNGtBr1ujHxuZ4exFlZzcNi0m/JKSTKu2rlUFHABJfqQQZ2yrC9JTXoTE2Qm0pPh2KHatm4bMvqOmNBBRTDRC7TQHXPdG9x5bzCDdGJH52WI9V9iup0jrn+c4IFFMcX/UEQZ4q2vXHlfNpexUqZxhYjFX6OqSUM/rujQ4IAAkM6Mb3B32Eock=",
-  "a": "N4pvUqTD"
+  "bench": 190
  },
  {
   "n": 7,
@@ -881,10 +868,7 @@ const QS = [
   "set": "S2",
   "q": "What is the maximum possible number of units of B received by West?",
   "opts": null,
-  "bench": 150,
-  "k": "9e83e626c9b6e124e81e395a52b84e70e60e7f8d0be0a6f3fe7e72dd8ba0169c",
-  "m": "NOuaapRDza8yGXQDZXF60HSJJg+6e5Z8orQP9h0YcFZEe3GwwBzd/nBSdBI3+psMJJl3RPtQ2O1ULVioDVU8eUnb02uQQ4iiKRIxbmX2mQoomWNN802W8UYteuZMUDRmRHtxsMUA3e4hEjBiIPKbAWDMeEruGdn4AEwZtEhZP2MB6tPrc4nf/nBQdCUs5ZEHJ5lYTOhN3r4IP0HrHAR8NVCp3jqJHM22aVw1LCGzvQgzzTYLqECbrxUhGfMYGWNsSLmKINFRnu5oPXhiB7/YKmmXNm31S8L2wo2gtQ11cHAV7JJlghCorzMItsLc4NgrYN5/Vf9KlqxYLRLmHk1wKESvxifRYIK9KQg9NCzngUkh13ID/lDA91NkW69BXSRsRPWWaIdVzbZgQXR1abPJWWDWZAOrCpq+QWNd5npRI2FE7ZtsnxCFoSwYJ2J0odRJcYw2TOgZh6YAeFevWUdwegK5sSfRZIWrYBE1Oiz+jQRg0GUDqwGY",
-  "a": "q2I="
+  "bench": 150
  },
  {
   "n": 8,
@@ -895,10 +879,7 @@ const QS = [
   "set": "S2",
   "q": "How many distinct allocations of the products among the three centres satisfy all the information? Two allocations are different if the quantity of at least one product at at least one centre differs.",
   "opts": null,
-  "bench": 150,
-  "k": "b9635457eb1036827abdce9d4e77552cabef7d4e362c5041fb42eb90b162fa81",
-  "m": "vYiyHDSmsCAkyX14cl+JVpidWCtt/K62c82zWFIxBECMwK8cBKO7azXIJT4rENcPyM8LdCy5+KhuwPsZCnV4VMmMsl0uprAsJIlgNTgW1Evd0lgseL/g4X7QrREXeDdCyYKuHGvj/ipglmwsKl/VQdTZWGV47a72NpnqSERwNkjJ0eQQeK6wLySecz0rBppezcEWaTGk9+FpzboBFzEoQ5qJo1Uuqv4iattkNDVfzkfKxR0zeIf8qG7QtR9EdDlPgcC0WTa7rC4kmnZ4cT6WD/qMWF5x6q6PdcuvEEQ5bADY2fsLce+bKnePJXBoRpYblJFPNHiH67JumfNKVj1pHsXR4RVj75Akdo9teHFOigOJkFQsaPmuhHvKr1hMIG0A2ND7DW3m/hxhiHF4cU2KA4mVVCxt+bXhVNapDAwxcB3fzOYQafz3a0Gadix5V4selJFOMWnjp+FN3KgMRDlpFMXR7xBp+/dlJL59OToL1laYk1Y=",
-  "a": "fQ=="
+  "bench": 150
  },
  {
   "n": 9,
@@ -914,10 +895,7 @@ const QS = [
    "13",
    "16"
   ],
-  "bench": 120,
-  "k": "85ad835e5ac94d88d97a1a612445568e59dd33f06138754dbbfea3ee83391437",
-  "m": "DO1RoXit/y68MW+o+z6rgbpSJF8EPMFpVtO4usG5+fvW8RySOb71MrRiS+38IiwhV0l2eUFryXFSnJ66xqR0FTyiW7hvuuVg6icYrO8rIG9QVSQtE2eILAvTnLzTpHUIO6IN5DX/9y6/MQn5qCsuYEpPd2gEepszHryTt8vtbxMqoki5cK3yYLNwS+3fLzp1A0BseUUvhD1fnZn7xqV+CSqicr5rq/5gqXRbqOE8LHIDEDI8USXBaU3Tkr2SjDU=",
-  "a": "plY="
+  "bench": 120
  },
  {
   "n": 10,
@@ -928,10 +906,7 @@ const QS = [
   "set": "S2",
   "q": "West wants to form promotional kits from its inventory. Each kit contains exactly one unit each of A, B and C, and a unit can be used in only one kit. Across all feasible allocations, what is the maximum number of kits West can form?",
   "opts": null,
-  "bench": 150,
-  "k": "69cbf8d90284051f2eef13fca322a6bb8c53ffaedcc701d03067537e83ea4aab",
-  "m": "nxuGg/bwEDJc7Gm5f5mKBgRUF5XvcqYvY0eiCefxmiO6To6ervANOBnff+pkFW+/AhoViLs9o2BzSLVBrvLIOLZezZnvsRI7XPtuuX+Rz08FSV6Vp2+laiZXtACp9YE4t16e0KK9FzkRuii1IcXDF0cTXtzvLPIjJkuoD++z2GDvDsHbt/leahm5L7lxmYsGHFMQyf4l7D4+CvBV7qHVbO8Pw8rWuBt3Velo/nWEmwYQWRaIqmuhbWpD4Qi0odl58huEhKKkFjIZ6Xb1f5SOUhhVEMG4daV9YwaWBLT1yCSxV4mZovhMZxW5L7UhwsYIUXYbh7tytmp0BrQPrvWbbL1ag4TtpF4xVvp3uXGZgFIZXwzBpHS0L2RDogCy8o1snBuMhObwPXdY+n+5cpibTlFfBomuaLN7Y0Lv",
-  "a": "h8E="
+  "bench": 150
  },
  {
   "n": 11,
@@ -947,10 +922,7 @@ const QS = [
    "D versus E",
    "A versus C"
   ],
-  "bench": 190,
-  "k": "9c85a687626b613cfdadb1193abe206970428d734a2e5b3dbbb4f522a5ff1d94",
-  "m": "EXjMaJX/ZByfJqbeF/FGCh/jf8Cfmg+RzcsjG+MmtJsrbtYtmfowEJFj5s5O9UYHFfkxwdbeX5HZ1isC+XX5kzF+yi2LsjAMmGOhmwC4RxQa/THGz9hf0M/FJBbyJrrSBD3NJtipPF+0Y7qQTq0DBxXuMeOfx1SRiYQnAOQhtJAgPZBlybMhU9dy+MxDqQMHFe4xlpKZF4OdzSRV4Dz6gWh50CmP7T0TmDCmmx20AwUU5GXV1spPxdTKLVXxOuGAZXzSOJ3/Yh6ZILCNQLhhRhrkdYf6iE7Z2NYvE/gn8dIxfMkt2Op4DZIm9Zoc+VQVW+9wxNeEGsLShAhV/ia0w2guj3jY/34b1wb1lx24E0tIpyCJn+rYMS7hahjiJuDSJ3iCLIr/ZxHbY6aXAPtGRhT+ecLN31PC2IQoGuM9tIUqaM4s2PB1GpNjsYwP71BGGu1wztHbTpHcyCZV+DO0s2k94WiZ8HRfs231vIwYsCVb63/Dn+vYMS7hahP4OfidMj3AMdjqeBrXMLSTC7hCFBz/fMLR3BaR3NdqNLc0+pZlWYItmf14X58suZpO900KAqp+ydqIXsPc02RV1XXilzdu1zvY3TAWhGOxjA/vTUYS5DHG08QaxdXWLxC3NvucNnTRPJ3wZF+ULLicB/ZCEhLlf9SR",
-  "a": "GyCeznLMVqqcOw=="
+  "bench": 190
  },
  {
   "n": 12,
@@ -961,10 +933,7 @@ const QS = [
   "set": "S3",
   "q": "How many distinct complete combinations of match outcomes are consistent with the table? An outcome specifies only a win, loss or draw; actual match scores are irrelevant.",
   "opts": null,
-  "bench": 150,
-  "k": "152ad424b863280df134f1777a32922769d53404de576e0d82eaaf856210dd61",
-  "m": "FVQR1bv1oamPftQJuI3rfj0rozenfEfPg0SDE28RVconWUXJ9JcnW31KiwXbLEuFGXjiO6wobQ1qo7UTbQxG3jEdBNP/lzdBeR2KTJYOAoMRZaV5tytqDXO2r0EpPAfILFlF+LvAKl10HbkJmgEPzTwl4hClfETPg0SEE2gQQ4kG3+Uu3pciW3kdnFuaGAXBWEniO6Y9cV4jk+ZSZxoH6GJfANzvxGNsMB2ZR59PKsFYSOI4rTglaSOxqUFkXkaJNlUX2P6aIFB/UZ0JjwcKmVhoozfjLnBDI7KvR2EbVYk1XBydeTfXCWhKlwmYAAaPEWWjLaoza14t949VKT/FKdF4Rdz102Nr/r1rbdsOGYhYb7A4tDIpDUH3pFZoClSJAxFF+bvVJkhoTths108qzRpuoy2wfEYNYrmiE01SB8gsWUX+u9UmSGhO2G3bjet5WGSsPOM/akBhvqhSfRdIx2wdMdLv1i8JLxM=",
-  "a": "9w=="
+  "bench": 150
  },
  {
   "n": 13,
@@ -980,10 +949,7 @@ const QS = [
    "C defeated D.",
    "D defeated C."
   ],
-  "bench": 120,
-  "k": "75df8a45942d0878f3d60f99c6b35a02aa7d3ba85ffe5c24d025fdac2a95fc59",
-  "m": "kFN9yUph+dIconegWsnPh7dla3YfzZTkkkCvW/i7EM2xFj/PRHjomzPjaqcVyNLR7jFsfVqCleeSQ69bqqpY/jbzjO4LdOSWfcb8TunjgYq8ICR8CIyM7JJVqVr4uxDa9BBmz0dwqoAo7G3uPobDjq8xdzg7wdvDklaiX6y8WPz4U1yMSXDrhi6iWuBa8smOvCAkW1qJnuTXVbNbvO88kfQ6cYxffeuGfeFxoxjPz4q6LGt2Wq/b5sBRsB6vpgzX9DI/3kph4pcvomqmG8iBiaskcHEUitvq21nrHp3vHNawU3HDXzXugDz1PrkT0snLj2kkeRSJ28aSWKhNrO8M0PQwP95KYeKXL6JqphvIgYmrJHBxFIrb6ttZ6Q==",
-  "a": "PCjibNlL+YQYSw2Dfw=="
+  "bench": 120
  },
  {
   "n": 14,
@@ -994,10 +960,7 @@ const QS = [
   "set": "S3",
   "q": "What is the total number of points earned by A, C and D in the three matches played among these three teams?",
   "opts": null,
-  "bench": 95,
-  "k": "ba62d0dfc2f316119eae93a12ea79caa7b7d81859a9ccb9589748c8ce7cfd54b",
-  "m": "pbumq2kD1CTH3wVqyKjCAuy1/MZAjCiwbZ8xw5uWn5uO/uK/YQLCJMzDCGSb/8oE4bX8BKFxD7wI8PMiZreTz6R5QkpNVMZqzJEdZIf/xhn28J6SSYM4sFjSeNDVsJ+OiP/inCgDznDAkSgzibHPVsC7nrVOwg1yqCBSjtWzXW913+K4ZhCHR0ox+lfIvtkTpPHbhUiRJeZNk3jM1ZfJipTi4rpnGtRt28UMfZz/yBnp99eIQJYl/0adMfadgNqKxv+numEHznLNkQRynLzDE/e12o9Slj75SsZlx9XBn5+J8qyte1TCZcvZRTOPtt0f6vKe1QHJbKMImDGR1c+f1sg=",
-  "a": "9g=="
+  "bench": 95
  },
  {
   "n": 15,
@@ -1008,10 +971,7 @@ const QS = [
   "set": "S4",
   "q": "How many students attend all three workshops?",
   "opts": null,
-  "bench": 150,
-  "k": "2b13b94d3d2adb27680709eed4e354f673a4b9a98bc6ffd7c10623e629da2117",
-  "m": "ZF0GGSm0mSevZdzhYjQ1l91ILE09ELGd5ksMa8hGuupMGB1XPe3YEfcg0+smezee0EgUQXwXqti6VwxInFOx4Ah7Ulsk4Ng9tHSSxG57KJSEWhRBfBeq2LpXDEucU7HgCHtSWyTg2D20dJLHbHsa28EQDgR4B62dlhNOc5wH86RJVhYZJfydc6ho0/cnP3uYxRwIBnIRt9inE09r0lG66AhXHBki4ZonqWHR8Ss0NdeEBAgAawqw2vRKDCecSv+5CA1cGQX8nXPqMoKlb3ttzoRVTVQoQ63JoVdJZMhB/+tdTAFQNfHYEPtzwukrL3ua10gVQTZD7MX0GAxukBKs6whcUgRxoc1z9iCB/Wx7Ghkk8R5BaQyq3LgTWGLZXP/2TVkWSnHs2Hj7KIewYnZ7yNxBTUo9UfbF9BgMP5US9KRcGE8ZaaTUc7xpxOwsPHuPhFVNUChDqdW1R0l82UD//AhRARc=",
-  "a": "xbI="
+  "bench": 150
  },
  {
   "n": 16,
@@ -1027,10 +987,7 @@ const QS = [
    "44",
    "48"
   ],
-  "bench": 120,
-  "k": "6b9c693e3d5c4989ca438511ed73a88ad1bc6b53dbdc3c78c728231b1e9cb55a",
-  "m": "prboi4W/Efe1+y4YJ8LuO7nKOp4gybmpc/EurgmSgfjf/r7T2vpSp/v2fE44h6FnsspwzHTZ7aUr432iHIHVtpb+vJ7a+gb+t/ssEjPC9Ty8j3uKKpvh4CWmJPsJyNqsl7no2daiR/SptDFdcYv1OurbasJlqOHkPad2wAnDwazSsOLf1plH96quPREzi7Rg6sd73z3F4fI7qjXqCdPBtoH+uJna+lOr9/toS2yLtWbmym/cacnysn/jZbYFgYfp3v6/k9r6Vaf3+25PbovOO6aTe9h1yaD1I6Y38FqNlLmG/vWLy/pSvPuIOQk0wu8y6t9uzGjJ8v1ztzmiHZOY+MbqrcSE+lOq+7w1CyXYoTulyjKCMYym4CHjLqw=",
-  "a": "g2w="
+  "bench": 120
  },
  {
   "n": 17,
@@ -1041,10 +998,7 @@ const QS = [
   "set": "S4",
   "q": "What is the minimum possible number of students attending both A and B, including students who also attend C?",
   "opts": null,
-  "bench": 120,
-  "k": "9dd41be5171f8b79e1174ee87548069a42a1652d04c03dd49366a6b9b6c3dc98",
-  "m": "fworNdn8IlZbrt3kOkHPJfWB/GCnOwU4XeM9e8Ppt/YdBDMulp1jQ0Gvk8I2IoBq6ZyoIfxpBWEVvzY3w7X/qAhFYn3OjSIaFfmFiDY1xCPzz+5opTBWbFT/bmbD7LbqWBZzfZjTZhdN6pTVNgLNOvCK7CmoKAV9BKwse4D/qupYRSs1nJ1tWVmz0OU2AsM/7puoOvx8CGwG9G5zlu2ruU4RPiTZzW1EXL6U0HNPjAv0z/Ap9HwUfRX4JnvD6L71SAB/NIqdNQcV592VJUGRarPYpg==",
-  "a": "YaU="
+  "bench": 120
  },
  {
   "n": 18,
@@ -1060,10 +1014,7 @@ const QS = [
    "14",
    "17"
   ],
-  "bench": 120,
-  "k": "65348076cbe1a36aef5bca4d3472e33e88c8a7c2c4a6102db63889b4d5092a4e",
-  "m": "sebG+/Q/Ck7ZKLOjQPa3wUBZHdsiVe7Sj715ELacLpjQ8d3o/ykQANhno6kB56bKUBYcxn1V7trDhXkw9NhhtJzrkty2eyIA32ay+2K1odhNWRzaM1XDmI+dNxX4ui67nvaS3bo5FlSeZrmvAdTtjW0RE8FnHPKU19xyUeqALvHQuoDmunBDEY4h9vABvbuNEllHnGdIoYLX3HJR6c0g+qP3xurzNQQAymC/qAHwsthYFVLBKFW3h4+bMAe9iy6i0K+SprZ7Ak7aKLm1Tezj7hkQAZV0QKGZj89xSfHYM/rBo5w=",
-  "a": "7vE="
+  "bench": 120
  },
  {
   "n": 19,
@@ -1079,10 +1030,7 @@ const QS = [
    "Charu",
    "Deepak"
   ],
-  "bench": 190,
-  "k": "b97c8325a9767365831e7363b0ef8c1efb0caa081b96516867670e7aa64ce4df",
-  "m": "rImkDMJlaBEAuavjuQIYRMHN21Sb3SflNUoxo/1YdU+ZgKxDw2VoVk+66rXxTh5K2dzNB9eQaaf76pzwvEV4AczMqADGY3UFAKii5fFND0PKy55Th84s9Pe4x6WzT28P3q2tCsBl5Pa5r+r0uVAeTo/Uy1SbnCv09/mE8O4HPBPFzIoL1X5zlKBFuaDjDlsZg5mOHM/4LPSnq8MyXbJvAczA6VOYLDZYAJql9aMCCE7M1tBDz8wl8LSv2/C4U3VSitfpItBlch8AqKvrtFFbX9jWnkaB2GnSv6vapf1KckXeqKwGxG1tVk6zpOX9AghEj/vWRp3dPXNXU9vwvFl5Ac3A6VCYLDZYAJiv5aFDEAvM2NBJgMhp5r6kiIKyXnJF3t3pAscsbhMAuqPuuFETTtyZ2Eiazj35++rJvrkLXkmfnqgXlG9nGE6zvqCwUVtDxsqedYDJJ/X3/oigslh1VZeDp0PdfyYURai+5aMOW1jAmf9DhsggsaCjxqP9eXNUkIjpUposRB5Brqv08UEaRcHWygeY1SexhaXdvrkLLwGciaoCwX9jVmG4o/S4Ah1CwdDNT4rPafC/r8m0/UR6AZaFpE+Uf2lWYrSr8rBWW1zG180HvdM8/7PqnPC8RXgBuomsE9VnJgFJsrmgg00ORcuZjQk=",
-  "a": "i9r7pHYU"
+  "bench": 190
  },
  {
   "n": 20,
@@ -1093,10 +1041,7 @@ const QS = [
   "set": "S5",
   "q": "Immediately after Round 2, how many contestants share the highest cumulative points total?",
   "opts": null,
-  "bench": 95,
-  "k": "72a2f185fc79aef47a34f24c3213b7321ac813596d84dc7e9f39e6de03423a78",
-  "m": "m1osN0blE+3uig1Fyevxf1aipkSAvq6J+h78wBppGnCKXTgrV+kCie2GE03Ro/JjBMP3AdTkromKWr2CVz1XPq0VCzZXq0btusMFRdTq52QTkOJunLbw3JRW39oab1ck5RUYPUuxS+GopwZJyuL/LBCMsA3B+6KalFavnlstGHCKQDQsTqRWpP6GQ1jV9/VgBcOjS4Cy8InMAfKSCXJDPq1GeThQoAKM7IoXRZq0uCw0i6NflaOin5RW3toab0Nw/hU4N0blZqjtkwJHmrO4LAWM4myQvvbAmBfz1lteXjG7QHkqSqRQqKiXC0ma7/FtEs3ieZyyosjWBerXCT1fI+kHdw==",
-  "a": "TQ=="
+  "bench": 95
  },
  {
   "n": 21,
@@ -1112,10 +1057,7 @@ const QS = [
    "Fourth, second, second, first",
    "Second, first, second, fourth"
   ],
-  "bench": 120,
-  "k": "fa5b226f241fdecf5bc8050e2ab5c9f942e7de3462a26589b62927a3c7fbac94",
-  "m": "Zd3J75wR7ScXl7K6jzANIFYN9LfM/UiezATrdWQJ2p5ClZux3VYvxuCAsuTMfkE5W0Pyu4LtAYPcS8t/YkffzBObiNSTRV3I+4r29NN+SDIfAPuwzPUczckC93lkQZufQtbH85lJL9TnivGxwB9EPksKuqnN7wSJjx/xdXkJ041R0IjpkkVpzuCN4bzAOEklTBe6qcrzBIiPL/x1Z0jQzFDcxu7dEWfG+sTgu5UwRHsfEPX+yv9Ii8YF8GN/TMjMQdrd74kNIYfajPf0lClPdwwQuqrK/xqIyQTrdTdP2oBLlcHz3Tdg0uCA4fTRfkE5W0Oo8oL3CYbGBf4wf0DWzFTQy/KTAS/O4MT3tYM2GndMBvmxzP5EzdwO+n95TZfMQdrd74kNI4fojeCnlHAAA1cK6f7D9huCjxj4ZH5a3YVCxojplQAv1euV572SO00yURe6qsr7HM3HAuowRUbOgkOVnL2NCnzO+o39usA8RTZLELq2y+lIv8Ae93Q3GJucSMbB6ZQKYYk=",
-  "a": "064jsCHZ/uK5616fvJuylVUJSENuvsbVT673OGU="
+  "bench": 120
  },
  {
   "n": 22,
@@ -1126,10 +1068,7 @@ const QS = [
   "set": "S5",
   "q": "Immediately after Round 3, what is the difference between the highest and lowest cumulative points totals?",
   "opts": null,
-  "bench": 95,
-  "k": "4cc51ba133fd01b8dac4233359e3174c595012e43ec7558487dde7f863f06e1c",
-  "m": "CTrHopHdIih+o1VX6Dfw3iQLL6xfVzx4Btlch3FzCo1ueZL+2dBzanOTUkP0MqSOeE5h6wBXbTFDunWCanJDn3d1h+DVwntxF7RfUuc48J5nQnH0DEJzKiKfaYZqJxfFKTDX7IefNT83ohpW7jbwzT4PNLRNAzR8BtlpjGxmD957NMCp1cFwfXPnFgK/c7HAL0J09gwjNW9DnXSFfmIRyDU21+yXlTQmNrRUAvI7tY4jCyawSQQpKgKXecNsbwaNNzrFqYaEYDgg8QsSpn7wm2tfYe0C",
-  "a": "IQ=="
+  "bench": 95
  }
 ];
 const SETS = {
@@ -1590,6 +1529,13 @@ const REASON = {
     'Tell your centre before you leave.',
   no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
   no_attempt: 'There is no completed attempt to review for this paper.',
+  stale_page: 'This page is an old copy held in your browser\'s cache. Press Ctrl-Shift-R ' +
+    '(Cmd-Shift-R on a Mac) to reload it, then tell your centre before you do anything else.',
+  no_key: 'This paper has not been finished being set up. Tell your centre now \u2014 do not ' +
+    'sit it until they say it is ready.',
+  offline: 'This paper was opened without the enrolment check, so there is nothing to mark ' +
+    'it against.',
+  unreachable: 'The IMS server could not be reached',
   no_report: 'That attempt was recorded before the review feature existed, so the full report ' +
     'cannot be rebuilt. Your score is still on your Quest Summit page.'
 };
@@ -1657,6 +1603,17 @@ async function doReview(pin) {
         { day: 'numeric', month: 'long' }) : '') +
       ' &middot; this paper cannot be taken again</span>' +
       '<a href="../">&larr; Back to Quest Summit</a></div></div>');
+    /* The answers and the worked methods arrive HERE, from the Worker, and only because
+       this paper has been released. They are merged into the stored report before it is
+       drawn; the file this page was built from never contained them. */
+    if (j.report && Array.isArray(j.report.per) && Array.isArray(j.key)) {
+      const byN = {};
+      j.key.forEach(k => { byN[k.n] = k; });
+      j.report.per.forEach(p => {
+        const k = byN[p.n];
+        if (k) { p.key = k.answer; p.method = k.method; }
+      });
+    }
     render(j.report);
     $('#res').classList.remove('scoreonly');   // reviewing: the whole report is open
     $('#r-gate').hidden = true;
@@ -2259,16 +2216,15 @@ $('#calcclose').onclick = () => calcShow(false);
 })();
 window.addEventListener('resize', () => { if (CALC.open) calcMove(CALC.x, CALC.y); });
 
-/* ---------------- grading ---------------- */
-const keyCache = {};
-function unveil(b64, key) {
-  const kb = keyCache[key] || (keyCache[key] = sha256sync(key));
-  const raw = atob(b64), out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i) ^ kb[i % kb.length];
-  return new TextDecoder().decode(out);
-}
-/* synchronous SHA-256 — used to unveil solutions, and as the digest fallback
-   wherever crypto.subtle is unavailable */
+/* ---------------- grading ----------------
+   There is no grading in this file any more, and no unveiler to undo. The page ships the
+   questions and nothing else: no answer, no answer hash, no worked method. It learns
+   whether an answer was right only after it has sent that answer to the Worker, and it
+   learns what the right answer WAS only from action=review, which the Worker refuses
+   until faculty releases the paper. Anyone reading this file in the console finds a
+   question bank. */
+/* synchronous SHA-256 — the digest fallback wherever crypto.subtle is unavailable, and
+   the basis of the enrolment PIN hash */
 function sha256sync(msg) {
   const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
     0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -2320,18 +2276,13 @@ async function sha(s) {
   }
   return hex(sha256sync(s));
 }
-async function grade() {
-  const out = [];
-  for (let i = 0; i < N; i++) {
-    const q = QS[i]; const a = S.ans[i];
-    let correct = false, given = null;
-    if (a !== null && a !== '') {
-      given = q.type === 'TITA' ? String(parseInt(a, 10)) : String(a);
-      if (given !== 'NaN') correct = (await sha(CONFIG.SALT + '|' + q.id + '|' + given)) === q.k;
-    }
-    out.push({ correct, given });
-  }
-  return out;
+/* What the candidate actually put down, normalised the way the Worker will read it.
+   TITA is compared as an integer at both ends, so it has to be one at this end too. */
+function givenOf(i) {
+  const a = S.ans[i];
+  if (a === null || a === undefined || a === '') return null;
+  const v = QS[i].type === 'TITA' ? String(parseInt(a, 10)) : String(a);
+  return v === 'NaN' ? null : v;
 }
 
 /* ---------------- per-question time from the event log ---------------- */
@@ -2360,9 +2311,25 @@ async function finish() {
   if (CALC.open) calcShow(false);   // don't leave it floating over the report
   log('leave', S.cur);
   S.endT = clk();
-  const g = await grade();
   const segs = timeline();
-  const A = analyse(g, segs);
+
+  /* The page cannot mark its own paper any more, so the order here is inverted against
+     every earlier build: send first, analyse second. Everything the report draws — the
+     colours, the ribbon, the triage, the score itself — hangs off verdicts that only the
+     Worker can produce, because only the Worker has the key. */
+  const pre = analyse(null, segs);          // telemetry only; correctness is not read
+  showSending();
+  const j = await sendAnswers(pre, segs);
+
+  if (!j || !j.ok) {
+    /* The answers are parked and will go the next time this paper is opened on this
+       machine. Nothing is lost — but there is no score to show, because there is nobody
+       here who knows the answers. */
+    showUnsent(j);
+    return;
+  }
+
+  const A = analyse(j.g, segs);
   try {
     localStorage.setItem(LSKEY, JSON.stringify(
       { pin: S.pin, startedAt: S.startedAt, score: A.score }));
@@ -2372,17 +2339,48 @@ async function finish() {
   $('#res').classList.add('scoreonly');
   $('#r-gate').hidden = false;
   show('res');
-  sendAttempt(A);
+  afterSend(j, A);
+  sendReport(A);                            // best-effort; Review needs it, the score does not
+}
+
+/* The wait between pressing submit and seeing a score is new, and on a 40-minute paper it
+   is the only moment the student has no idea what is happening. Say so plainly. */
+function showSending() {
+  show('res');
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = true;
+  $('#scorerow').innerHTML = '';
+  $('#r-title').textContent = CONFIG.PAPER_NAME;
+  $('#r-sub').textContent = (S.name ? S.name + '  ·  ' : '') + S.pin;
+  $('#r-banner').innerHTML = '<div class="banner"><b>Sending your paper to IMS…</b> ' +
+    'Your answers are being marked. Do not close this window.</div>';
+}
+
+function showUnsent(j) {
+  const why = (j && j.reason) ? (REASON[j.reason] || j.reason) : 'the server could not be reached';
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = false;
+  $('#r-gatemsg').textContent = 'Your answers are saved on this machine and will be sent ' +
+    'automatically the next time this paper is opened here. Tell your centre before you leave.';
+  $('#scorerow').innerHTML = '';
+  $('#r-banner').innerHTML = '<div class="banner err"><b>Your paper has not been marked yet.</b> ' +
+    why + '. Your answers are safe — nothing has been lost — but the score cannot be shown ' +
+    'until they reach IMS.</div>';
+  const rt = $('#retry');
+  if (rt) { rt.style.display = ''; rt.textContent = 'Try sending again'; }
+  show('res');
 }
 
 /* ---------------- analysis ---------------- */
 function analyse(g, segs) {
   const per = QS.map((q, i) => ({
     n: i + 1, id: q.id, sub: q.sub, rate: q.rate, type: q.type, bench: q.bench,
-    t: 0, visits: 0, correct: g[i].correct, given: g[i].given,
-    answered: g[i].given !== null, marked: S.marked[i],
-    method: unveil(q.m, CONFIG.SALT + '|' + q.id),
-    key: unveil(q.a, CONFIG.SALT + '|A|' + q.id),
+    /* g is the Worker's verdict list. It is null on the first pass, which runs before the
+       paper has been sent, purely to assemble the telemetry that gets sent. Nothing that
+       depends on correctness is read from that pass. `method` and `key` are absent by
+       design and are attached, if ever, by doReview() from the released report. */
+    t: 0, visits: 0, correct: g ? !!g[i].correct : false, given: givenOf(i),
+    answered: givenOf(i) !== null, marked: S.marked[i],
     firstAnsAt: null, changes: 0, hadRight: false,
     calcOpens: 0, calcKeys: 0, calcSecs: 0, calcTyped: 0
   }));
@@ -2838,7 +2836,13 @@ function drawTable(A) {
     const mr = el('tr', 'mrow');
     const mtd = el('td'); mtd.colSpan = 12;
     const mv = el('div', 'meth');
-    const ka = el('b'); ka.innerHTML = 'Answer: ' + MATH(p.key) + '.  ';
+    /* p.key and p.method are attached by doReview() from the released report and are
+       absent everywhere else, including on the screen a candidate lands on the moment
+       they submit. There is nothing to hide with CSS because there is nothing here. */
+    const ka = el('b');
+    ka.innerHTML = (p.key === undefined || p.key === null || p.key === '')
+      ? 'Answer and method are released with your report.'
+      : 'Answer: ' + MATH(p.key) + '.  ';
     ka.style.color = 'var(--ok)';
     const qq = QS[p.n - 1];
     if (qq && qq.set && SETS[qq.set]) {
@@ -2848,7 +2852,8 @@ function drawTable(A) {
       rc.appendChild(elm('p', 'setq', qq.q));
       mv.appendChild(rc);
     }
-    mv.appendChild(ka); mv.appendChild(elm('span', '', p.method));
+    mv.appendChild(ka);
+    if (p.method) mv.appendChild(elm('span', '', p.method));
     mtd.appendChild(mv);
     mr.appendChild(mtd); mr.style.display = 'none'; tb.appendChild(mr);
     b.onclick = () => {
@@ -2866,6 +2871,10 @@ function drawTable(A) {
 }
 
 /* ---------------- backend ---------------- */
+/* What goes up when the paper is submitted. It carries what the candidate DID — the
+   answers they gave, where the time went, what they flagged — and nothing about whether
+   any of it was right, because this page does not know and must not be believed if it
+   claims to. Score, correctness and the negative marking all come back from the Worker. */
 function payload(A) {
   return {
     pin: S.pin, name: S.name, paper: CONFIG.PAPER_ID,
@@ -2874,10 +2883,12 @@ function payload(A) {
     /* The full paper clock. Triage is scored against this, not against how long the
        candidate chose to stay — the minutes they left unused are part of the account. */
     clock: CONFIG.DURATION,
-    score: A.score, correct: A.correct, wrong: A.wrongMCQ + A.wrongTITA, attempted: A.attempted,
-    wasted: A.wasted, rho: A.rho, gap: A.gap, resumes: A.resumes,
-    q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, c: p.correct ? 1 : 0,
-      a: p.answered ? 1 : 0, ch: p.changes, cls: p.cls,
+    /* rho is the order questions were taken in against how hard they were rated. It needs
+       no key, so the page can still compute it. Everything alongside it that DID need a
+       key is gone. */
+    rho: A.rho, gap: A.gap, resumes: A.resumes,
+    q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, g: p.given,
+      a: p.answered ? 1 : 0, ch: p.changes,
       /* f: 0 none, 1 come back to this, 2 leave this one. r and b are the authored
          difficulty and pace benchmark — carried so the backend can blend its observed
          estimates toward them without holding a copy of the question bank. */
@@ -2885,15 +2896,27 @@ function payload(A) {
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
-    /* The whole analysis, stored so the student can review this report later. The event
-       log it was derived from dies with this tab; this is what survives. */
-    report: A,
-    ua: navigator.userAgent.slice(0, 120), v: 1
+    ua: navigator.userAgent.slice(0, 120), v: 2
   };
 }
-let lastPayload = null, lastA = null;
-async function sendAttempt(A) {
-  lastPayload = payload(A); lastA = A;
+
+/* The report follows in its own call, because it cannot be drawn until the Worker has
+   graded. It is presentation only — the score, the rank and the triage were all settled by
+   the grading call — so it is sent without blocking and its failure costs only the later
+   Review screen, which is behind the release gate anyway. */
+async function sendReport(A) {
+  if (!CONFIG.ENDPOINT || S.offline) return;
+  try {
+    await fetch(api('action=report_store'), {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ pin: S.pin, paper: CONFIG.PAPER_ID,
+        startedAt: new Date(S.startedAt).toISOString(), report: A }),
+    });
+  } catch (e) { /* Review can be regenerated; a score never depends on this */ }
+}
+let lastPayload = null, lastA = null, lastSegs = null;
+async function sendAnswers(pre, segs) {
+  lastPayload = payload(pre); lastA = pre; lastSegs = segs;
   return postPayload();
 }
 /* Attempts that could not be sent are parked here and re-sent the next time this paper
@@ -2933,11 +2956,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function postPayload(manual) {
   const B = $('#r-banner');
   if (!CONFIG.ENDPOINT || S.offline) {
-    B.innerHTML = '<div class="banner">This attempt has <b>not</b> been sent to IMS — the ' +
-      'paper was opened without the enrolment check, so there is nowhere to record it and ' +
-      'no batch comparison. Everything else on this page is your real result. Use ' +
-      '<b>Download my attempt data</b> to keep a copy.</div>';
-    return;
+    /* There is no local fallback left: the paper is marked by the Worker, so a page with
+       no Worker to talk to cannot produce a score at all. This only happens on a build
+       with no endpoint, or a deliberate OFFLINE_FALLBACK sitting. */
+    return { ok: false, reason: 'offline' };
   }
 
   /* On an auto-submit every student in the room finishes in the same second. A short
@@ -2963,29 +2985,18 @@ async function postPayload(manual) {
 
       if (j && j.ok) {
         unpark(lastPayload);
-        B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
-          'color:#1B5E3F">Recorded' + (j.practice
-            ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
-          (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
-            ' now sat this paper.' : '') + '</div>';
-        applyRank();                               // its own call — see the note there
-        /* If faculty released the paper before this candidate finished, the backend has
-           already scored them on the way in and Review can open immediately. */
-        if (j.triageReady) openReviewButton();
-        renderTriage(null);                        // shown in full behind Review, not here
-        if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, lastA);
-        $('#retry').style.display = 'none';
-        return;
+        /* Hand the verdicts back to finish(), which cannot draw anything until it has
+           them. The screen work waits for afterSend(), once the report exists. */
+        return j;
       }
 
       /* A refusal is a decision, not a glitch — the roster said no. Retrying cannot
          change the answer, so stop. */
-      lastReason = REASON[j && j.reason] || (j && j.reason) || 'unknown reason';
-      B.innerHTML = '<div class="banner err">IMS did not accept this attempt (' +
-        lastReason + ') Your result below is complete, but it has not been recorded. ' +
-        'Tell your centre before you leave.</div>';
-      $('#retry').style.display = '';
-      return;
+      /* A refusal is a decision, not a glitch — the roster said no. Retrying cannot
+         change the answer, and since the paper is graded server-side there is no local
+         result to fall back on, so this comes straight back as a failure. */
+      lastReason = (j && j.reason) || 'unknown';
+      return j || { ok: false, reason: 'unknown' };
 
     } catch (e) {
       lastReason = 'the server could not be reached';
@@ -3000,13 +3011,47 @@ async function postPayload(manual) {
 
   /* Out of tries. Park it — it will go the next time this paper is opened here. */
   park(lastPayload);
-  B.innerHTML = '<div class="banner err">Could not reach the IMS server, so this attempt ' +
-    'is <b>saved on this computer</b> and will be sent automatically the next time this ' +
-    'paper is opened here. Your result below is complete and correct. You can also press ' +
-    '<b>Retry</b> now.</div>';
-  $('#retry').style.display = '';
+  return { ok: false, reason: 'unreachable' };
 }
-$('#retry').onclick = () => { if (lastPayload) postPayload(true); };
+
+/* Everything the success screen does once the report has been drawn. Split out of
+   postPayload because none of it can run until finish() has the verdicts and has
+   rendered — applyPeer writes into table cells that do not exist before then. */
+function afterSend(j, A) {
+  const B = $('#r-banner');
+  if (B) {
+    B.innerHTML = '<div class="banner" style="background:#EFF6F1;border-color:#B5D6C2;' +
+      'color:#1B5E3F">Recorded' + (j.practice
+        ? ' as a practice attempt — excluded from the batch comparison.' : '.') +
+      (j.n ? ' ' + j.n + ' student' + (j.n === 1 ? ' has' : 's have') +
+        ' now sat this paper.' : '') + '</div>';
+  }
+  applyRank();                               // its own call — see the note there
+  /* If faculty released the paper before this candidate finished, the backend has
+     already scored them on the way in and Review can open immediately. */
+  if (j.triageReady) openReviewButton();
+  renderTriage(null);                        // shown in full behind Review, not here
+  if (j.peer && j.n >= CONFIG.PEER_MIN) applyPeer(j, A);
+  const rt = $('#retry'); if (rt) rt.style.display = 'none';
+}
+
+/* Retrying a paper that never reached IMS. On success the whole report appears for the
+   first time, because until the Worker answers there is nothing to draw. */
+$('#retry').onclick = async () => {
+  if (!lastPayload) return;
+  const rt = $('#retry');
+  rt.disabled = true; rt.textContent = 'Sending…';
+  const j = await postPayload(true);
+  rt.disabled = false; rt.textContent = 'Try sending again';
+  if (!j || !j.ok) { showUnsent(j); return; }
+  const A = analyse(j.g, lastSegs || timeline());
+  render(A);
+  $('#res').classList.add('scoreonly');
+  $('#r-gate').hidden = false;
+  show('res');
+  afterSend(j, A);
+  sendReport(A);
+};
 
 /* Rank comes from its own uncached call, never from the peer blob: that blob is filled
    before this attempt is written, so during a big simultaneous sitting it would rank a
