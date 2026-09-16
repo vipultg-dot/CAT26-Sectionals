@@ -98,6 +98,11 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .tb-brand{font-weight:700;letter-spacing:.2em;font-size:12px}
 .tb-title{font-size:13px;color:rgba(255,255,255,.66);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-r{display:flex;align-items:center;gap:20px}
+/* Only ever on the instructions screen. Once Begin is pressed the player is the only thing
+   live — no way out but submitting — so this markup does not exist on the test screen. */
+.tb-home{font-family:var(--f-mono);font-size:12px;letter-spacing:.04em;color:#fff;
+  opacity:.72;text-decoration:none;white-space:nowrap}
+.tb-home:hover{opacity:1;text-decoration:underline}
 .tb-pin{font-family:var(--f-mono);font-size:12.5px;color:rgba(255,255,255,.7)}
 .timer{font-family:var(--f-mono);font-size:22px;font-weight:500;letter-spacing:.02em;
   padding:3px 12px;border:1px solid rgba(255,255,255,.28);min-width:104px;text-align:center}
@@ -524,7 +529,10 @@ section.blk:last-of-type{border-bottom:0}
   <div class="topbar"><div class="wrap">
     <div class="tb-l"><span class="tb-brand">IMS</span>
       <span class="tb-title">Most Expected CAT 2026 — Recalibrated Set &middot; DILR Sectional</span></div>
-    <div class="tb-r"><span class="tb-pin" id="pinlbl2"></span></div>
+    <div class="tb-r">
+      <a class="tb-home" href="../">&larr; All papers</a>
+      <span class="tb-pin" id="pinlbl2"></span>
+    </div>
   </div></div>
   <div class="wrap">
     <div class="eyebrow">General instructions</div>
