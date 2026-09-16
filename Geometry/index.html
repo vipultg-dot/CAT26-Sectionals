@@ -468,6 +468,73 @@ section.blk:last-of-type{border-bottom:0}
 .gatecard p{margin:0 0 20px;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:64ch}
 .gaterow{display:flex;gap:12px;flex-wrap:wrap}
 .gaterow .btn[disabled]{opacity:.45;cursor:not-allowed}
+/* the question panel — the report's one destination. Opened from the ribbon, the scatter
+   and the table, all of which used to be pointers to nothing. */
+.qpwrap{position:fixed;inset:0;z-index:90;display:flex;align-items:center;
+  justify-content:center;padding:24px}
+.qpwrap[hidden]{display:none}
+.qpback{position:absolute;inset:0;background:rgba(26,26,24,.55)}
+.qpsheet{position:relative;display:flex;flex-direction:column;width:min(860px,100%);
+  max-height:100%;background:var(--card,#fff);border:1px solid var(--rule,#D8D2C4);
+  box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.qp-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--rule,#D8D2C4);background:#FBF9F4;flex:0 0 auto}
+.qp-bar #qp-title{flex:1;font-weight:600;font-size:14px}
+.qp-bar button{font:inherit;font-size:13px;padding:6px 12px;cursor:pointer;
+  background:#fff;border:1px solid var(--rule,#D8D2C4);color:inherit}
+.qp-bar button:hover{background:#F2EEE4}
+.qp-bar button:disabled{opacity:.4;cursor:default}
+.qp-bar #qp-close{background:#1F3358;border-color:#1F3358;color:#fff}
+#qp-body{overflow:auto;padding:20px 22px 26px;-webkit-overflow-scrolling:touch}
+.qp-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.qp-n{font-family:'Source Serif 4',Georgia,serif;font-size:22px;font-weight:600;
+  margin-right:4px}
+.qp-saw{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#8A8578}
+.qp-tag{display:flex;align-items:center;gap:8px;font-size:13px;color:#5C574B;
+  margin:0 0 16px}
+.qp-tag i{width:11px;height:11px;border-radius:2px;flex:0 0 auto}
+.qp-set{border-left:3px solid var(--rule,#D8D2C4);padding:2px 0 2px 14px;margin:0 0 18px;
+  font-size:14px}
+.qp-set b{display:block;margin-bottom:6px}
+.qp-q{font-size:16.5px;line-height:1.62;margin:0 0 18px}
+.qp-opts{display:flex;flex-direction:column;gap:8px;margin:0 0 6px}
+.qp-opt{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
+  border:1px solid var(--rule,#D8D2C4);background:#fff;font-size:15px}
+.qp-opt.iskey{border-color:#1B5E3F;background:#F2F8F4}
+.qp-opt.ismine{border-color:#1F3358}
+.qp-opt.ismine.iskey{border-color:#1B5E3F;background:#EAF4EE}
+.qp-opt.ismine:not(.iskey){border-color:#C00000;background:#FCF3F2}
+.qp-on{font-family:'IBM Plex Mono',monospace;color:#8A8578;flex:0 0 auto}
+.qp-ov{flex:1}
+.qp-mk{display:flex;flex-direction:column;gap:2px;align-items:flex-end;flex:0 0 auto}
+.qp-mk b{font-size:11px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.mk-key{color:#1B5E3F}
+.mk-mine{color:#1F3358}
+.mk-wrong{color:#C00000}
+.qp-none{font-size:13.5px;color:#8A8578;margin:8px 0 0}
+.qp-tita{border:1px solid var(--rule,#D8D2C4);padding:12px 14px;font-size:15px;
+  display:flex;flex-direction:column;gap:6px}
+.qp-tk{color:#1B5E3F;font-weight:600}
+.qp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:1px;
+  background:var(--rule,#D8D2C4);border:1px solid var(--rule,#D8D2C4);margin:20px 0 0}
+.qp-st{background:#fff;padding:10px 12px}
+.qp-st b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.qp-st span{font-size:11px;color:#8A8578;letter-spacing:.02em}
+.qp-mh{margin:22px 0 8px;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:#8A8578}
+.qp-method{font-size:14.5px;line-height:1.68}
+.ribbar.clickable{cursor:pointer}
+.qtable tr.rowopen{cursor:pointer}
+.qtable tr.rowopen:hover td{background:#F7F4EC}
+@media (max-width:640px){
+  .qpwrap{padding:0}
+  .qpsheet{width:100%;height:100%;max-height:100%;border:0}
+  .qp-bar{padding:10px 12px}
+  .qp-bar #qp-title{font-size:13px}
+  #qp-body{padding:16px 14px 24px}
+  .qp-mk{align-items:flex-start}
+}
+
 /* per-student randomisation: the canonical question id, so a hall query is resolvable
    when no two students see the same question number */
 .chip.qid{background:transparent;border:1px dashed #CFC7B6;color:#8A8578;
@@ -756,6 +823,21 @@ section.blk:last-of-type{border-bottom:0}
 </div>
 
 <div id="ribtip"></div>
+
+<!-- The question panel. Locked until faculty releases the paper, because it carries the
+     answer and the worked method alongside the question. -->
+<div class="qpwrap" id="qpanel" hidden>
+  <div class="qpback" id="qp-back"></div>
+  <div class="qpsheet">
+    <div class="qp-bar">
+      <button id="qp-prev" type="button">&larr; Prev</button>
+      <button id="qp-next" type="button">Next &rarr;</button>
+      <span id="qp-title"></span>
+      <button id="qp-close" type="button">Close</button>
+    </div>
+    <div id="qp-body"></div>
+  </div>
+</div>
 
 <script>
 /* ============================================================
@@ -2493,8 +2575,152 @@ const CL = {
   unseen:{ c: '#EFEAE0', l: 'Never opened' }
 };
 
+/* ---------------- the question panel ----------------
+   The report used to be three pointers with no destination. The ribbon hovered a question,
+   the scatter plotted one, the table listed one, and none of them could show you the
+   question. The table's inline expander printed the answer and the method but kept the
+   question text inside an `if (q.set)`, so it appeared on DILR and nowhere else, and the
+   options appeared nowhere at all. This panel is the destination; all three open it.
+
+   It stays shut until faculty releases the paper, because it carries the key and the worked
+   method next to the question. Release is read off the data rather than held as a flag:
+   p.key is attached only by doReview(), and doReview() is the only thing the Worker will
+   answer once papers.triage_at is set. */
+let RPT = null, RELEASED = false, PEER = {}, QPI = null;
+
+function ordn(k) {
+  const t = k % 100;
+  if (t >= 11 && t <= 13) return k + 'th';
+  return k + (['th', 'st', 'nd', 'rd'][k % 10] || 'th');
+}
+
+function qpClose() {
+  $('#qpanel').hidden = true;
+  document.body.style.overflow = '';
+  QPI = null;
+}
+function qpNav(d) {
+  if (QPI === null) return;
+  qpOpen((QPI + d + N) % N);        // canonical order, whichever surface you came in from
+}
+
+function qpOpen(i) {
+  if (!RELEASED || !RPT || !RPT.per || !RPT.per[i]) return;
+  const p = RPT.per[i], q = QS[i];
+  const body = $('#qp-body');
+  body.innerHTML = '';
+
+  const h = el('div', 'qp-head');
+  h.appendChild(el('span', 'qp-n', 'Question ' + p.n));
+  /* Two numbers, because after the shuffle they are two different things: p.n is the one
+     everybody in a post-test discussion means, p.shown is where it sat on this screen. */
+  if (p.shown && p.shown !== p.n)
+    h.appendChild(el('span', 'qp-saw', 'you saw it ' + ordn(p.shown)));
+  h.appendChild(el('span', 'chip', p.sub));
+  h.appendChild(el('span', 'chip' + (q.type === 'TITA' ? ' tita' : ''),
+    q.type === 'TITA' ? 'TITA \u00b7 no negative' : 'MCQ \u00b7 +3 / \u22121'));
+  h.appendChild(el('span', 'chip qid', q.id));
+  h.appendChild(el('span', 'chip', 'rated ' + p.rate));
+  body.appendChild(h);
+
+  const tg = el('div', 'qp-tag');
+  const sw = el('i'); sw.style.background = CL[p.cls].c;
+  tg.appendChild(sw); tg.appendChild(el('span', '', CL[p.cls].l));
+  body.appendChild(tg);
+
+  if (q.set && SETS[q.set]) {
+    const rc = el('div', 'qp-set');
+    rc.appendChild(elm('b', '', SETS[q.set].label || q.set));
+    setBlocks(SETS[q.set], rc);
+    body.appendChild(rc);
+  }
+
+  body.appendChild(elm('div', 'qp-q', q.q));
+
+  const keyN = (q.type === 'MCQ' && p.key != null && p.key !== '') ? parseInt(p.key, 10) : null;
+  const mine = (p.given === null || p.given === undefined || p.given === '') ? null : p.given;
+  if (q.type === 'MCQ' && q.opts && q.opts.length) {
+    /* Drawn in the order THIS student saw them, off the option map stored in the report, so
+       "you marked (2)" says what they remember marking. */
+    const om = (p.omap && p.omap.length === q.opts.length) ? p.omap : q.opts.map((o, j) => j + 1);
+    const mineN = mine === null ? null : parseInt(mine, 10);
+    const wrap = el('div', 'qp-opts');
+    om.forEach((k, j) => {
+      const isKey = keyN !== null && k === keyN, isMine = mineN !== null && k === mineN;
+      const row = el('div', 'qp-opt' + (isKey ? ' iskey' : '') + (isMine ? ' ismine' : ''));
+      row.appendChild(el('span', 'qp-on', '(' + (j + 1) + ')'));
+      row.appendChild(elm('span', 'qp-ov', q.opts[k - 1]));
+      const mk = el('span', 'qp-mk');
+      if (isMine) mk.appendChild(el('b', isKey ? 'mk-mine' : 'mk-wrong',
+        isKey ? 'your answer \u2713' : 'your answer \u2717'));
+      if (isKey && !isMine) mk.appendChild(el('b', 'mk-key', 'correct answer'));
+      row.appendChild(mk);
+      wrap.appendChild(row);
+    });
+    body.appendChild(wrap);
+    if (mineN === null) body.appendChild(el('p', 'qp-none',
+      p.t > 0 ? 'You opened this question and left it blank.' : 'You never opened this question.'));
+  } else {
+    const t = el('div', 'qp-tita');
+    t.appendChild(el('div', '', mine === null
+      ? (p.t > 0 ? 'You opened this question and left it blank.'
+                 : 'You never opened this question.')
+      : 'You entered ' + mine));
+    if (p.key != null && p.key !== '')
+      t.appendChild(elm('div', 'qp-tk', 'Correct answer: ' + p.key));
+    body.appendChild(t);
+  }
+
+  const pr = PEER[p.n] || null;
+  const st = el('div', 'qp-stats');
+  [['Your time', p.t ? human(p.t) : 'none'],
+   ['Benchmark', p.bench + 's'],
+   ['Batch median', pr ? human(pr.med) : '\u2014'],
+   ['Solved in', (pr && pr.nCor) ? human(pr.medCor) : '\u2014'],
+   ['Visits', p.visits || 0],
+   ['Changes', p.changes || 0],
+   ['You flagged it', p.marked === 1 ? 'come back' : p.marked === 2 ? 'leave it' : 'no']
+  ].forEach(([k, v]) => {
+    const c = el('div', 'qp-st');
+    c.appendChild(el('b', '', v)); c.appendChild(el('span', '', k));
+    st.appendChild(c);
+  });
+  body.appendChild(st);
+
+  if (p.method) {
+    body.appendChild(el('div', 'qp-mh', 'Method'));
+    body.appendChild(elm('div', 'qp-method', p.method));
+  }
+
+  $('#qp-title').textContent = 'Question ' + p.n + ' of ' + N +
+    (p.id ? '  \u00b7  ' + p.id : '');
+  QPI = i;
+  $('#qpanel').hidden = false;
+  document.body.style.overflow = 'hidden';   // the sheet scrolls, the report behind it does not
+  body.scrollTop = 0;
+}
+
+if ($('#qp-close')) {
+  $('#qp-close').onclick = qpClose;
+  $('#qp-back').onclick = qpClose;
+  $('#qp-prev').onclick = () => qpNav(-1);
+  $('#qp-next').onclick = () => qpNav(1);
+  /* Its own key handler: the player's returns early unless the test screen is on. */
+  document.addEventListener('keydown', e => {
+    if ($('#qpanel').hidden) return;
+    if (e.key === 'Escape') { qpClose(); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { qpNav(1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { qpNav(-1); e.preventDefault(); }
+  });
+}
+
 /* ---------------- render ---------------- */
 function render(A) {
+  /* Everything the panel needs comes from the report object, so it is parked here rather
+     than threaded through four call sites. */
+  RPT = A;
+  RELEASED = !!(A.per && A.per.some(p => p.key !== undefined && p.key !== null && p.key !== ''));
+  qpClose();
   const d = new Date(S.startedAt);
   $('#r-sub').textContent = (S.name ? S.name + '  ·  ' : '') + S.pin + '  ·  ' +
     d.toLocaleDateString('en-IN',
@@ -2562,6 +2788,31 @@ function render(A) {
     u.onmouseleave = () => $('#ribtip').style.display = 'none';
     bar.appendChild(u);
   }
+  /* One hit area for the whole bar rather than a handler per segment. A four-second visit
+     is about 1.5px wide at this scale, so per-segment targets would leave most of a fast
+     first pass physically unclickable — and that is exactly the behaviour worth inspecting.
+     The click picks a MOMENT on the forty-minute clock and opens whichever question owned
+     that second; a click landing in an interruption or the unused tail snaps to the nearest
+     visit, so the bar never swallows a click. */
+  bar.classList.toggle('clickable', RELEASED);
+  bar.onclick = ev => {
+    if (!RELEASED) return;
+    const r = bar.getBoundingClientRect();
+    if (!r.width) return;
+    const sec = Math.max(0, Math.min(total, ((ev.clientX - r.left) / r.width) * total));
+    const real = segs.filter(x => x.q >= 0);
+    if (!real.length) return;
+    let hit = real.find(x => sec >= x.from && sec < x.to);
+    if (!hit) {
+      let best = null;
+      real.forEach(x => {
+        const dd = Math.abs((x.from + x.to) / 2 - sec);
+        if (best === null || dd < best.d) best = { s: x, d: dd };
+      });
+      hit = best.s;
+    }
+    qpOpen(hit.q);
+  };
   const ax = $('#ribaxis'); ax.innerHTML = '';
   for (let m = 0; m <= 40; m += 5) ax.appendChild(el('span', '', m + 'm'));
   const kb = $('#ribkey'); kb.innerHTML = '';
@@ -2785,11 +3036,24 @@ function drawTriage(A) {
       stroke: '#8A8578', 'stroke-width': 1.5, 'stroke-dasharray': '2 5', opacity: .75 }));
   }
   pts.forEach(p => {
-    svg.appendChild(mk('circle', { cx: x(p.ansOrder), cy: y(p.rate), r: 8,
-      fill: CL[p.cls].c, opacity: .9 }));
+    const dot = mk('circle', { cx: x(p.ansOrder), cy: y(p.rate), r: 8,
+      fill: CL[p.cls].c, opacity: .9 });
     const t = mk('text', { x: x(p.ansOrder), y: y(p.rate) + 3.5, 'text-anchor': 'middle',
       fill: '#fff', 'font-size': 9, 'font-family': 'IBM Plex Mono, monospace' });
-    t.textContent = p.n; svg.appendChild(t);
+    t.textContent = p.n;
+    /* Third way into the panel. The dot is 16px across, so unlike the ribbon it is a
+       perfectly good click target on its own. */
+    if (RELEASED) {
+      const hit = mk('circle', { cx: x(p.ansOrder), cy: y(p.rate), r: 13,
+        fill: 'transparent', style: 'cursor:pointer' });
+      hit.addEventListener('click', () => qpOpen(p.n - 1));
+      const ttl = mk('title');
+      ttl.textContent = 'Q' + p.n + ' \u00b7 ' + p.sub + ' \u2014 click to open';
+      hit.appendChild(ttl);
+      svg.appendChild(dot); svg.appendChild(t); svg.appendChild(hit);
+    } else {
+      svg.appendChild(dot); svg.appendChild(t);
+    }
   });
   box.appendChild(svg);
   /* Scored on the ADJUSTED figure. The raw rho rewards a kind permutation, and since every
@@ -2818,17 +3082,6 @@ function drawTriage(A) {
         'you happened to be given.</span>'
       : '');
   box.appendChild(note);
-}
-
-/* The key is stored as a canonical option number, which means nothing to a student whose
-   options were drawn in another order. Show the slot THEY saw, plus the option text, which is
-   right whatever order it was in. A TITA key is already the answer itself. */
-function answerLabel(p, q) {
-  if (!q || q.type !== 'MCQ') return String(p.key);
-  const k = parseInt(p.key, 10);
-  if (!(k >= 1) || !q.opts || q.opts[k - 1] === undefined) return String(p.key);
-  const slot = (p.omap && p.omap.indexOf(k) >= 0) ? p.omap.indexOf(k) + 1 : k;
-  return '(' + slot + ')  ' + q.opts[k - 1];
 }
 
 function drawTable(A) {
@@ -2863,38 +3116,20 @@ function drawTable(A) {
     tr.appendChild(el('td', 'num r peer-' + p.n, '—'));
     tr.appendChild(el('td', 'num r pcor-' + p.n, '—'));
     tr.appendChild(el('td', 'num r', p.visits || '—'));
+    /* The inline expander this replaced printed the answer and the method but put the
+       question text inside an `if (q.set)` — so it showed on DILR and nowhere else — and
+       never showed the options at all. The panel carries all of it, so the second table
+       row, its 13-column span and its show/hide state are all gone. */
     const last = el('td');
-    const b = el('button', 'exp', 'method');
+    const b = el('button', 'exp', RELEASED ? 'open' : 'locked');
+    b.disabled = !RELEASED;
+    b.onclick = ev => { ev.stopPropagation(); qpOpen(p.n - 1); };
     last.appendChild(b); tr.appendChild(last);
-    tb.appendChild(tr);
-    const mr = el('tr', 'mrow');
-    const mtd = el('td'); mtd.colSpan = 13;
-    const mv = el('div', 'meth');
-    /* p.key and p.method are attached by doReview() from the released report and are
-       absent everywhere else, including on the screen a candidate lands on the moment
-       they submit. There is nothing to hide with CSS because there is nothing here. */
-    const ka = el('b');
-    ka.innerHTML = (p.key === undefined || p.key === null || p.key === '')
-      ? 'Answer and method are released with your report.'
-      : 'Answer: ' + MATH(answerLabel(p, QS[p.n - 1])) + '.  ';
-    ka.style.color = 'var(--ok)';
-    const qq = QS[p.n - 1];
-    if (qq && qq.set && SETS[qq.set]) {
-      const rc = el('div', 'setrecap');
-      rc.appendChild(elm('b', '', SETS[qq.set].label || qq.set));
-      setBlocks(SETS[qq.set], rc);
-      rc.appendChild(elm('p', 'setq', qq.q));
-      mv.appendChild(rc);
+    if (RELEASED) {
+      tr.classList.add('rowopen');
+      tr.onclick = () => qpOpen(p.n - 1);
     }
-    mv.appendChild(ka);
-    if (p.method) mv.appendChild(elm('span', '', p.method));
-    mtd.appendChild(mv);
-    mr.appendChild(mtd); mr.style.display = 'none'; tb.appendChild(mr);
-    b.onclick = () => {
-      const open = mr.style.display === 'none';
-      mr.style.display = open ? 'table-row' : 'none';
-      b.textContent = open ? 'hide' : 'method';
-    };
+    tb.appendChild(tr);
   });
   T.appendChild(tb);
   $('#peernote').innerHTML = 'The <b>Peer</b> column fills in with the batch median once ' +
@@ -3110,6 +3345,9 @@ async function applyRank() {
 }
 
 function applyPeer(j, A) {
+  /* Kept for the panel as well as the table: it draws the batch median and the solved-in
+     time, and it may be opened long after this call has painted the table cells. */
+  j.peer.forEach(p => { PEER[p.n] = p; });
   j.peer.forEach(p => {
     const c = document.querySelector('.peer-' + p.n);
     if (c) { c.textContent = human(p.med);
