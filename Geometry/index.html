@@ -2108,7 +2108,10 @@ $('#a-clear').onclick = () => { S.ans[S.cur] = null; log('clear', S.cur); goTo(S
 function flag(v) {
   S.marked[S.cur] = (S.marked[S.cur] === v) ? 0 : v;
   const f = S.marked[S.cur];
-  log(f === 1 ? 'come' : f === 2 ? 'leave' : 'unflag', S.cur);
+  /* Deliberately NOT 'leave': that name belongs to goTo(), and timeline() closes a time
+     segment on it. Flagging the last question does not navigate, so sharing the name meant
+     the segment closed at the flag and the time spent after it vanished from the report. */
+  log(f === 1 ? 'come' : f === 2 ? 'leaveq' : 'unflag', S.cur);
   const d = SH.pos[S.cur];
   if (f && d < N - 1) goTo(SH.ord[d + 1]); else paint();
   saveProgress();
@@ -2480,6 +2483,16 @@ function analyse(g, segs) {
     t: 0, visits: 0, correct: g ? !!g[i].correct : false, given: givenOf(i),
     answered: givenOf(i) !== null, marked: S.marked[i],
     firstAnsAt: null, changes: 0, hadRight: false,
+    /* CAPTURE. These three exist so the cohort can be read properly after the sitting, and
+       they are the only things here that cannot be recovered later: the event log they come
+       from lives in the browser and is gone the moment the tab closes.
+         firstSeen  the second this question was first opened. With firstAnsAt it separates
+                    "read it at 3:00, answered it at 28:00" from "found it at 28:00", which
+                    is the difference between bad triage and never getting there.
+         returned   the candidate flagged this "come back to this" and actually came back.
+                    The player was built to teach the two-pass method; this measures whether
+                    the second pass happened. */
+    firstSeen: null, returned: 0,
     calcOpens: 0, calcKeys: 0, calcSecs: 0, calcTyped: 0
   }));
 
@@ -2510,6 +2523,23 @@ function analyse(g, segs) {
   }
   segs.forEach(s => { if (s.q < 0) return;          // an interruption is charged to no question
     per[s.q].t += (s.to - s.from); per[s.q].visits++; });
+
+  /* First sighting, and whether a "come back to this" was honoured. Both are read straight
+     off the event log: the last time the flag was raised, and whether the question was ever
+     opened again after that. */
+  {
+    const lastCome = {};
+    for (const e of S.ev) {
+      if (e.type === 'enter' && per[e.q]) {
+        if (per[e.q].firstSeen === null) per[e.q].firstSeen = e.t;
+        if (lastCome[e.q] !== undefined && e.t >= lastCome[e.q]) per[e.q].returned = 1;
+      } else if (e.type === 'come') {
+        lastCome[e.q] = e.t;
+      } else if (e.type === 'unflag') {
+        delete lastCome[e.q];        // the promise was withdrawn, so there is none to keep
+      }
+    }
+  }
 
   // selection history → changes, first-answer time
   const sel = {};
@@ -2575,12 +2605,22 @@ function analyse(g, segs) {
     rhoBase = rhoOf(ordered.map(p => walkRank[p.n]), ys);
     rhoAdj = adjustRho(rho, rhoBase);
   }
+  /* The two-pass method, measured. "Come back to this" is a promise to yourself; this is
+     how often it was kept. */
+  const marked1 = per.filter(p => p.marked === 1);
+  const cameBack = marked1.filter(p => p.returned).length;
+  const cameBackWon = marked1.filter(p => p.returned && p.correct).length;
+  const leftAlone = per.filter(p => p.marked === 2);
+  const leftAloneKept = leftAlone.filter(p => !p.answered).length;
+
   const hardEarly = per.filter(p => p.rate >= 7 && p.firstAnsAt !== null && p.firstAnsAt <= 600).length;
   const flipHurt = per.filter(p => p.changes > 0 && !p.correct && p.answered).length;
   const flips = per.filter(p => p.changes > 0).length;
 
   return { per, score, correct, wrongMCQ, wrongTITA, attempted, tProd, tNeg, tBleed, tScan,
     wasted, cheap, couldBuy, rho, rhoBase, rhoAdj, hardEarly, flips, flipHurt,
+    marked1: marked1.length, cameBack, cameBackWon,
+    leftAlone: leftAlone.length, leftAloneKept,
     used: Math.min(S.endT, CONFIG.DURATION), auto: S.autoSub,
     gap: Math.min(S.gap, CONFIG.DURATION), resumes: S.resumes,
     maxScore: N * 3, benchTotal: QS.reduce((a, q) => a + q.bench, 0),
@@ -2906,6 +2946,25 @@ function render(A) {
       '</b> of those finished wrong. Second-guessing is expensive; look at those rows below.';
     box.appendChild(p3);
   }
+  /* The player teaches the two-pass method; this is the only place the report says whether
+     the candidate actually ran it. */
+  if (A.marked1 > 0 || A.leftAlone > 0) {
+    const p4 = el('p');
+    const bits = [];
+    if (A.marked1 > 0) {
+      bits.push('You marked <b>' + A.marked1 + '</b> question' + (A.marked1 === 1 ? '' : 's') +
+        ' to come back to, and returned to <b>' + A.cameBack + '</b>' +
+        (A.cameBack ? ', winning ' + A.cameBackWon + ' of them' : '') + '.');
+      if (A.cameBack < A.marked1)
+        bits.push('<b>' + (A.marked1 - A.cameBack) + '</b> never got a second pass \u2014 that is ' +
+          'the half of the method that gets dropped under a clock.');
+    }
+    if (A.leftAlone > 0)
+      bits.push('You wrote off <b>' + A.leftAlone + '</b> and stayed away from <b>' +
+        A.leftAloneKept + '</b> of them.');
+    p4.innerHTML = bits.join(' ');
+    box.appendChild(p4);
+  }
   V.appendChild(box);
 
   drawTriage(A);
@@ -3182,7 +3241,14 @@ function payload(A) {
        no key, so the page can still compute it. Everything alongside it that DID need a
        key is gone. */
     rho: A.rho, gap: A.gap, resumes: A.resumes,
+    /* fa, fs and rt are new and the Worker was not changed to receive them: gradeAll()
+       spreads the whole question object into the stored row, so anything added here is
+       captured verbatim inside the existing q JSON column. No schema change, no migration.
+         fa  second the first answer that still stands was given (null if never answered)
+         fs  second the question was first opened (null if never opened)
+         rt  1 if a "come back to this" was honoured */
     q: A.per.map(p => ({ n: p.n, id: p.id, t: p.t, v: p.visits, g: p.given,
+      fa: p.firstAnsAt, fs: p.firstSeen, rt: p.returned || 0,
       a: p.answered ? 1 : 0, ch: p.changes,
       /* f: 0 none, 1 come back to this, 2 leave this one. r and b are the authored
          difficulty and pace benchmark — carried so the backend can blend its observed
