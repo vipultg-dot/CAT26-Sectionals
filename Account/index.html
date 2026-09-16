@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>IMS · Your password — Quest Summit</title>
+<style>
+:root{
+  --navy:#1F3A63; --cream:#F7F5EF; --ink:#16202E; --mute:#6B7280; --line:#DED8CA;
+  --ok:#1B5E3F; --ok-soft:#EFF6F1; --ok-line:#B5D6C2; --danger:#B3261E; --danger-soft:#FBEDEC;
+  --f-ser:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--ink);font:17px/1.6 var(--f-sans)}
+header{background:var(--navy);color:#fff;padding:22px 0}
+.wrap{max-width:560px;margin:0 auto;padding:0 20px}
+.brand{font:700 13px/1 var(--f-sans);letter-spacing:.18em;text-transform:uppercase;opacity:.75}
+h1{font:400 30px/1.2 var(--f-ser);margin:10px 0 0}
+.home{color:rgba(255,255,255,.75);font:13px var(--f-sans);text-decoration:none}
+.home:hover{color:#fff}
+main{padding:32px 0 80px}
+.lead{font:17px/1.65 var(--f-sans);color:var(--ink);margin:0 0 26px}
+label{display:block;font:600 13px/1 var(--f-sans);letter-spacing:.06em;text-transform:uppercase;
+  color:var(--mute);margin:20px 0 7px}
+input{width:100%;padding:15px 14px;border:1px solid var(--line);border-radius:9px;background:#fff;
+  font:17px var(--f-mono);color:var(--ink)}
+input:focus{outline:2px solid var(--navy);outline-offset:1px}
+.hint{font:14px/1.5 var(--f-sans);color:var(--mute);margin:8px 0 0}
+button{width:100%;margin-top:26px;padding:16px;border:0;border-radius:9px;background:var(--navy);
+  color:#fff;font:600 17px var(--f-sans);cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.note{margin:22px 0 0;padding:14px 16px;border-radius:9px;font:15px/1.55 var(--f-sans)}
+.note.ok{background:var(--ok-soft);border:1px solid var(--ok-line);color:var(--ok)}
+.note.err{background:var(--danger-soft);border:1px solid #E4B9B6;color:var(--danger)}
+.done{text-align:center;padding:34px 0}
+.done h2{font:400 27px/1.25 var(--f-ser);margin:0 0 12px}
+.done a{display:inline-block;margin-top:22px;color:var(--navy);font-weight:600}
+.hide{display:none !important}
+.foot{margin:38px 0 0;padding-top:20px;border-top:1px solid var(--line);
+  font:14px/1.6 var(--f-sans);color:var(--mute)}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <div class="brand">IMS &middot; Quest Summit</div>
+  <h1>Your password</h1>
+  <a class="home" href="../">&larr; Back to your papers</a>
+</div></header>
+
+<main class="wrap">
+  <div id="form">
+    <p class="lead">Change the password you were given on your slip to something you will
+      remember. You do not have to &mdash; the one on your slip works perfectly well.</p>
+
+    <label for="pin">IMS PIN</label>
+    <input id="pin" autocomplete="username" spellcheck="false" autocapitalize="characters"
+           placeholder="e.g. AHM26QA001">
+
+    <label for="cur">Current password</label>
+    <input id="cur" type="password" autocomplete="current-password" spellcheck="false"
+           placeholder="from your slip">
+    <p class="hint">If your centre added you today and never gave you a slip, leave this empty.</p>
+
+    <label for="nw">New password</label>
+    <input id="nw" type="password" autocomplete="new-password" spellcheck="false"
+           placeholder="at least 6 characters">
+
+    <label for="nw2">New password again</label>
+    <input id="nw2" type="password" autocomplete="new-password" spellcheck="false">
+
+    <button id="go">Change my password</button>
+    <div id="msg"></div>
+
+    <p class="foot">Once you change it, nobody can look it up &mdash; not your faculty, not
+      IMS. That is what makes it yours. If you forget it, ask at the desk and they will
+      issue you a new one in a few seconds.</p>
+  </div>
+
+  <div id="done" class="done hide">
+    <h2>Done.</h2>
+    <p class="lead" id="donemsg"></p>
+    <a href="../">&larr; Back to your papers</a>
+  </div>
+</main>
+
+<script>
+const API = 'https://ims-cat26.vipul-tg.workers.dev';
+const $ = s => document.querySelector(s);
+const REASON = {
+  unknown: 'That PIN is not on the enrolled list. Check it, or ask at the desk.',
+  inactive: 'That PIN is no longer active. Please speak to your centre.',
+  bad_password: 'Your current password is not right. It is case sensitive, and it contains ' +
+    'no zeros or ones — those characters are the letters O and I.',
+  too_short: 'Your new password must be at least 6 characters.',
+  too_long: 'That is too long. Keep it under 64 characters.',
+  same_password: 'That is the password you already have. Choose a different one.',
+  missing: 'Something was left empty.',
+};
+function msg(cls, text){ $('#msg').innerHTML = '<div class="note ' + cls + '">' + text + '</div>'; }
+
+/* The PIN travels from the hub in this tab, so a student arriving from their papers page
+   does not type it twice. */
+try {
+  const saved = sessionStorage.getItem('ims_cat26_hub');
+  if (saved && !$('#pin').value) $('#pin').value = saved;
+} catch(e){}
+
+$('#go').onclick = async () => {
+  const pin = $('#pin').value.trim().toUpperCase();
+  const cur = $('#cur').value;
+  const nw  = $('#nw').value;
+  const nw2 = $('#nw2').value;
+  $('#msg').innerHTML = '';
+
+  if (pin.length < 4){ msg('err','Enter your IMS PIN.'); return; }
+  if (nw.length < 6){ msg('err','Your new password must be at least 6 characters.'); return; }
+  if (nw !== nw2){ msg('err','The two new passwords do not match. Type them again.'); return; }
+
+  const b = $('#go');
+  b.disabled = true; b.textContent = 'Changing…';
+  try {
+    const r = await fetch(API + '?action=pw_change', {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ pin, current: cur, next: nw })
+    });
+    const j = await r.json();
+    if (!j.ok){
+      msg('err', REASON[j.reason] || 'That could not be changed. Please ask at the desk.');
+      return;
+    }
+    /* The Worker hands back a fresh session, so a student who changes their password
+       part-way through the day is not signed out of the papers they still have to sit. */
+    try {
+      localStorage.setItem('ims_cat26_session', JSON.stringify({ pin, token: j.token }));
+    } catch(e){}
+    $('#form').classList.add('hide');
+    $('#done').classList.remove('hide');
+    $('#donemsg').textContent = (j.name ? j.name.split(/\s+/)[0] + ', your' : 'Your') +
+      ' password has been changed. Use the new one from now on — and remember it, ' +
+      'because it cannot be looked up.';
+  } catch(e){
+    msg('err','Could not reach the IMS server. Check your connection and try again.');
+  } finally {
+    b.disabled = false; b.textContent = 'Change my password';
+  }
+};
+['pin','cur','nw','nw2'].forEach(id => {
+  $('#' + id).addEventListener('keydown', e => { if (e.key === 'Enter') $('#go').click(); });
+});
+</script>
+</body>
+</html>
