@@ -35,6 +35,7 @@ body{background:var(--paper);color:var(--ink);
 .brand small{display:block;font-weight:400;letter-spacing:.1em;font-size:calc(11.68*var(--z));opacity:.72;margin-top:2px}
 .whoami{font-size:calc(13.84*var(--z));opacity:.9;text-align:right}
 .whoami b{display:block;font-weight:600;opacity:1}
+a.signout{text-decoration:none;display:inline-block;white-space:nowrap}
 .signout{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:4px;
   padding:5px 11px;font:inherit;font-size:calc(13.48*var(--z));cursor:pointer;margin-left:12px}
 .signout:hover{background:rgba(255,255,255,.12)}
@@ -91,6 +92,8 @@ input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3p
 .chip.open{background:var(--green-soft);color:var(--green)}
 .chip.shut{background:var(--amber-soft);color:var(--amber)}
 .chip.dn{background:#fff;color:var(--green);border:1px solid #BFD9CA}
+.pwhint{margin:16px 0 0;font-size:calc(13.84*var(--z));color:var(--muted);line-height:1.5}
+.pwhint a{color:var(--navy);font-weight:600}
 .foot{border-top:1px solid var(--rule);padding-block:22px 60px;color:var(--muted);font-size:calc(14.2*var(--z))}
 
 #gate.off,#list.off{display:none}
@@ -112,6 +115,7 @@ input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3p
   <div class="brand">IMS<small>TRUSTED FOR SUCCESS</small></div>
   <div style="display:flex;align-items:center">
     <div class="whoami" id="whoami" hidden><b id="wname"></b><span id="wmeta" class="mono"></span></div>
+    <a class="signout" id="pwlink" href="Account/" hidden>Change password</a>
     <button class="signout" id="signout" hidden>Sign out</button>
   </div>
 </div></div>
@@ -134,6 +138,8 @@ input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3p
            spellcheck="false" placeholder="IMS0000000000">
     <button class="btn btn-wide" id="go">Continue</button>
     <div class="warn" id="warn"></div>
+    <p class="pwhint">Want to change your password? <a href="Account/">Do it here</a>.
+      You will need the one on your slip. Lost it — ask your faculty to issue a new one.</p>
   </div>
 </div></section>
 
@@ -185,6 +191,7 @@ async function signIn(pin, silent) {
 function render(pin, j) {
   const first = (j.name || '').trim().split(/\s+/)[0] || '';
   $('#whoami').hidden = false; $('#signout').hidden = false;
+  $('#pwlink').hidden = false;
   $('#wname').textContent = j.name || pin;
   $('#wmeta').textContent = [pin, j.batch].filter(Boolean).join('  ·  ');
   $('#greet').textContent = first ? first + ', here are your papers.' : 'Your papers';
