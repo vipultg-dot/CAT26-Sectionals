@@ -497,10 +497,15 @@ section.blk:last-of-type{border-bottom:0}
       <div id="gateform">
         <label for="pin">IMS PIN</label>
         <input id="pin" autocomplete="off" spellcheck="false" placeholder="e.g. AHM26QA001">
-        <p class="hint">Enter your PIN exactly as it appears on your IMS record. It is checked
-          against the enrolled list before the paper opens.</p>
+        <label for="pw" style="margin-top:14px">Password</label>
+        <input id="pw" type="password" autocomplete="current-password" spellcheck="false"
+               autocapitalize="off" autocorrect="off" placeholder="from your slip">
+        <p class="hint">Your PIN and the password on the slip your centre gave you. Your PIN
+          alone is not enough &mdash; it is on display at the centre, and your attempt is
+          recorded against your name.</p>
         <div class="warnbox" id="gatewarn"></div>
-        <button class="btn" id="gatego">Verify PIN &rarr;</button>
+        <button class="btn" id="gatego">Sign in &rarr;</button>
+        <button class="btn-link" id="gatepwhelp">I don't have a password</button>
       </div>
       <div id="gatewelcome" hidden>
         <div class="wel-eyebrow">Verified</div>
@@ -1075,7 +1080,7 @@ const PINS = ["fdeddd50879e77b7", "852da58eacf0efa8", "e3a5c27909af22a6", "efe97
 
 /* ---------------- state ---------------- */
 const S = {
-  pin: "", name: "", batch: "", centre: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
+  pin: "", name: "", batch: "", centre: "", token: "", startedAt: 0, t0: 0, cur: 0, ended: false, autoSub: false,
   ans: Array(N).fill(null),      // option index 1..4 | string | null
   marked: Array(N).fill(0),
   seen: Array(N).fill(false),
@@ -1284,6 +1289,10 @@ const REASON = {
     'Tell your centre before you leave.',
   no_paper: 'This paper is not set up on the IMS server. Please tell your centre.',
   no_attempt: 'There is no completed attempt to review for this paper.',
+  bad_password: 'That password is not right. Check the slip your centre gave you \u2014 it is ' +
+    'case sensitive, and it contains no zeros or ones (those are the letters O and I).',
+  session_expired: 'You have been signed out. Enter your PIN and password again \u2014 nothing ' +
+    'is lost, the paper has not started.',
   stale_page: 'This page is an old copy held in your browser\'s cache. Press Ctrl-Shift-R ' +
     '(Cmd-Shift-R on a Mac) to reload it, then tell your centre before you do anything else.',
   no_key: 'This paper has not been finished being set up. Tell your centre now \u2014 do not ' +
@@ -1299,6 +1308,31 @@ const REASON = {
    The passcode is verified on the server and is not present anywhere in this file. */
 const QP = new URLSearchParams(location.search);
 const REVIEW_MODE = QP.get('review') === '1';
+
+/* ---- the signed session ----
+   The password is checked once, at the gate, and exchanged for a short signature over the
+   PIN and an expiry. That signature is what the paper presents when it unlocks, so a burst
+   of 300 simultaneous starts costs one HMAC each rather than 100,000 rounds of PBKDF2.
+
+   Kept in localStorage rather than sessionStorage so a student moving between the hub and
+   a paper, or opening a second paper later in the day, does not retype anything. It is
+   bounded by its own eight-hour expiry and is useless tomorrow. */
+const TOKKEY = 'ims_cat26_session';
+function saveSession(pin, token){
+  try { localStorage.setItem(TOKKEY, JSON.stringify({ pin, token })); } catch (e) {}
+  S.token = token;
+}
+function loadSession(pin){
+  try {
+    const s = JSON.parse(localStorage.getItem(TOKKEY) || 'null');
+    if (s && s.pin === pin && s.token) return s.token;
+  } catch (e) {}
+  return '';
+}
+function dropSession(){
+  try { localStorage.removeItem(TOKKEY); } catch (e) {}
+  S.token = '';
+}
 const HUBKEY = 'ims_quest_pin';
 let unlocked = false;
 
@@ -1319,10 +1353,26 @@ async function unlockPaper() {
   try {
     const r = await fetch(api('action=unlock'), {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ pin: S.pin, paper: CONFIG.PAPER_ID, passcode: code })
+      body: JSON.stringify({ pin: S.pin, paper: CONFIG.PAPER_ID, passcode: code,
+                             token: S.token || loadSession(S.pin) })
     });
     const j = await r.json();
-    if (!j.ok) { pcWarn(REASON[j.reason] || 'The paper could not be unlocked.'); return; }
+    if (!j.ok) {
+      /* Signed out between the gate and here — an eight-hour-old tab, usually. Send them
+         back to the PIN screen rather than leaving them on a passcode that cannot work.
+         Nothing is lost: the clock has not started. */
+      if (j.reason === 'session_expired') {
+        dropSession();
+        show('gate');
+        $('#gateform').hidden = false; $('#gatewelcome').hidden = true;
+        gateMsg(REASON.session_expired);
+        const pf = $('#pw'); if (pf) pf.value = '';
+        $('#pin').focus();
+        return;
+      }
+      pcWarn(REASON[j.reason] || 'The paper could not be unlocked.');
+      return;
+    }
     unlocked = true;
     $('#pcbox').classList.add('pcok');
     $('#pcbox').innerHTML = '<h4>Paper unlocked</h4>' +
@@ -1405,31 +1455,26 @@ async function serverKnows(v) {
     return !!(j && j.ok);
   } catch (e) { return false; }
 }
+/* The enrolled-PIN table baked into this file is no longer the gate — a PIN is a name, not
+   a key, and the gate is now the password. The table is left in place but unread: keeping
+   it costs nothing and rebuilding every paper to strip it would change 22 questions' worth
+   of file for no gain. */
 async function verifyPin() {
   const v = $('#pin').value.trim().toUpperCase();
+  const pwEl = $('#pw');
+  const pw = pwEl ? pwEl.value : '';
   $('#gatewarn').classList.remove('on');
   if (v.length < 4) { gateMsg('Enter your IMS PIN — at least four characters.'); return; }
 
-  /* ---- fast path: the baked enrolment list, no network ---- */
-  if (PINS && PINS.length) {
+  if (REVIEW_MODE) {
+    /* Looking at a finished report, not sitting a paper. That report is gated server-side
+       and carries nothing at all until faculty releases it. */
     gateBusy(true);
-    await new Promise(r => setTimeout(r, 0));     // let the button paint before we block
-    const ok = PINS.indexOf(pinHash(v)) >= 0;
+    await doReview(v);
     gateBusy(false);
-    if (ok) {
-      try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
-      if (REVIEW_MODE) return doReview(v);         // arrived here to look, not to sit
-      welcome(v, { pending: true });
-      fetchWho(v);                                 // greeting + prior notice, non-blocking
-      return;
-    }
-    /* A miss is not a refusal. This list is a snapshot frozen when the paper was built,
-       so anyone enrolled since is legitimately absent from it, and it is not the real
-       gate in any case: the worker re-checks the roster at unlock and again at submit.
-       Fall through and ask the server, which reads the roster the sheet keeps in sync. */
+    return;
   }
 
-  /* ---- fallback: no enrolment table was baked in, so ask the server ---- */
   if (!CONFIG.ENDPOINT) {
     if (!CONFIG.OFFLINE_FALLBACK) {
       gateMsg('<b>This paper is not open yet.</b> It has not been connected to the IMS ' +
@@ -1441,19 +1486,26 @@ async function verifyPin() {
 
   gateBusy(true);
   try {
-    const r = await fetch(api('action=who&paper=' + encodeURIComponent(CONFIG.PAPER_ID) +
-      '&pin=' + encodeURIComponent(v)));
+    const r = await fetch(api('action=pw_check'), {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ pin: v, password: pw })
+    });
     const j = await r.json();
     gateBusy(false);
-    if (!j.ok) { gateMsg(REASON[j.reason] || 'That PIN could not be verified.'); return; }
+    if (!j.ok) {
+      gateMsg(REASON[j.reason] || 'That PIN and password could not be verified.');
+      if (j.reason === 'bad_password' && pwEl) { pwEl.value = ''; pwEl.focus(); }
+      return;
+    }
+    saveSession(v, j.token);
     try { sessionStorage.setItem(HUBKEY, v); } catch (e) {}
-    if (REVIEW_MODE) return doReview(v);
     welcome(v, j);
+    fetchWho(v);                     // prior-attempt notice; never blocks the start
   } catch (e) {
     gateBusy(false);
     if (CONFIG.OFFLINE_FALLBACK) return welcome(v, { name: '', offline: true });
-    gateMsg('<b>Could not reach the IMS server</b>, so your PIN cannot be checked and the ' +
-      'paper will not open. Check your connection and press Verify again. If it keeps ' +
+    gateMsg('<b>Could not reach the IMS server</b>, so you cannot be signed in and the ' +
+      'paper will not open. Check your connection and press Sign in again. If it keeps ' +
       'failing, tell your centre before sitting the paper.');
   }
 }
@@ -1530,15 +1582,34 @@ $('#passcode').addEventListener('keydown', e => { if (e.key === 'Enter') unlockP
   try { saved = sessionStorage.getItem(HUBKEY); } catch (e) {}
   if (!saved) return;
   const el = $('#pin');
-  if (el && !el.value) { el.value = saved; verifyPin(); }
+  if (!el || el.value) return;
+  el.value = saved;
+  if (REVIEW_MODE) { verifyPin(); return; }
+  const tok = loadSession(saved);
+  if (tok) {
+    /* Already signed in today, on this machine, so don't ask again. This shortcut proves
+       nothing on its own — the Worker re-checks the signature when the paper unlocks. */
+    S.token = tok;
+    welcome(saved, { pending: true });
+    fetchWho(saved);
+  }
 })();
 $('#welback').onclick = () => {
   $('#gatewelcome').hidden = true; $('#gateform').hidden = false;
   $('#pin').value = ''; $('#pin').focus();
+  const pf = $('#pw'); if (pf) pf.value = '';
   S.pin = ''; S.name = ''; S.batch = ''; S.centre = '';
   S.practice = false; S.prior = null; S.pending = false;
+  dropSession();
 };
-$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin(); });
+$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') {
+  const pf = $('#pw'); if (pf && !pf.value) { pf.focus(); return; } verifyPin(); } });
+if ($('#pw')) $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPin(); });
+if ($('#gatepwhelp')) $('#gatepwhelp').onclick = () => {
+  gateMsg('<b>Ask at the desk.</b> Your centre can issue you a new password in a few ' +
+    'seconds. If you were added to the roster today you may not have one yet \u2014 in that ' +
+    'case leave the box empty and sign in with your PIN alone.');
+};
 
 /* ---------------- start ---------------- */
 $('#begin').onclick = () => {
