@@ -417,7 +417,14 @@ section.blk:last-of-type{border-bottom:0}
 #calc .cpad .w2{grid-column:span 2}
 #calc .cpad .h2{grid-row:span 2}
 #calc.err .cdisp{color:#c00000;font-size:19px}
-#calcbtn.live{background:var(--navy);color:#fff;border-color:var(--navy)}
+/* The calculator was the first of four identically-styled ghost buttons in a fixed bar
+   at the BOTTOM of the screen, and the first person to sit a full paper could not find
+   it. It now sits in the top bar above the palette, where CAT trains people to look. */
+.tb-calc{font-family:var(--f-ui);font-size:calc(13.2*var(--z));font-weight:600;
+  padding:7px 14px;border:1px solid rgba(255,255,255,.45);background:transparent;
+  color:#fff;cursor:pointer;white-space:nowrap}
+.tb-calc:hover{background:rgba(255,255,255,.14)}
+#calcbtn.live{background:#fff;color:var(--navy);border-color:#fff}
 @media (max-width:520px){ #calc{width:calc(100vw - 24px);max-width:290px} }
 
 
@@ -566,6 +573,37 @@ section.blk:last-of-type{border-bottom:0}
 .chip.qid{background:transparent;border:1px dashed #CFC7B6;color:#8A8578;
   font-family:'IBM Plex Mono',monospace;font-size:calc(12.12*var(--z));letter-spacing:.02em}
 .seqmath{display:block;margin-top:6px;color:#8A8578;font-size:calc(13.2*var(--z));line-height:1.55}
+
+/* ============ COMPUTER-ONLY GATE ============ */
+#smallscreen{display:none;position:fixed;inset:0;z-index:9999;
+  background:#1F3864;color:#fff;padding:34px 26px;overflow-y:auto;
+  flex-direction:column;justify-content:center;align-items:flex-start;
+  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+#smallscreen .ss-brand{font-weight:700;font-size:13px;letter-spacing:.2em;
+  text-transform:uppercase;color:#F0B8B8}
+#smallscreen .ss-h{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:29px;
+  line-height:1.15;letter-spacing:-.02em;margin:14px 0 0}
+#smallscreen p{font-size:15px;line-height:1.62;color:rgba(255,255,255,.78);
+  margin:14px 0 0;max-width:34em}
+#smallscreen .ss-url{margin:22px 0 0;padding:12px 14px;width:100%;
+  border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13px;
+  color:#fff;word-break:break-all}
+#smallscreen .ss-foot{margin:22px 0 0;font-size:13px;line-height:1.55;
+  color:rgba(255,255,255,.55);max-width:34em}
+@media (max-width:700px),(max-height:480px){
+  #smallscreen{display:flex}
+  body{overflow:hidden}
+}
+
+/* A touch-screen laptop is a computer and passes the gate above, but it still fires
+   mousemove without ever firing mouseleave - so the ribbon tooltip pins itself over the
+   page at z-index 99, on top of the question panel it just opened. Hover, not width. */
+@media (hover:none){ #ribtip{display:none !important} }
+/* #qp-title is flex:1 with the default min-width:auto, so it cannot shrink below its own
+   text and pushes the Close button off the right edge of a narrow window. The panel is
+   the only way to see a question; it must always have a visible way out. */
+.qp-bar #qp-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -578,9 +616,9 @@ section.blk:last-of-type{border-bottom:0}
       <div class="gate-tag">Trusted for Success</div>
       <a class="homelink" href="../">&larr; All papers</a>
       <h1>Most Expected<br>CAT 2026<br><em>Algebra</em></h1>
-      <p class="gate-sub">Twenty-two questions built against the CAT 2022&ndash;2025 papers only.
-        Forty minutes. The paper is deliberately longer than the clock &mdash; what it measures is
-        which questions you choose, not only which you can solve.</p>
+      <p class="gate-sub">Twenty-two questions. Forty minutes. Multiple choice carries
+        <b>+3</b> for a correct answer and <b>&minus;1</b> for a wrong one. TITA questions
+        carry no negative marking.</p>
       <div class="gate-facts">
         <div class="gate-fact"><b>22</b><span>Questions</span></div>
         <div class="gate-fact"><b>40:00</b><span>Minutes</span></div>
@@ -645,13 +683,23 @@ section.blk:last-of-type{border-bottom:0}
         freely using the palette on the right, in any order, as often as you like.</dd></div>
       <div class="rulerow"><dt>Marking</dt><dd>Multiple choice: <b>+3</b> correct, <b>&minus;1</b> wrong.
         TITA questions carry <b>no negative marking</b> &mdash; every TITA answer is a whole number.
-        Tap the answer box to open the on-screen keypad; the physical keyboard does not type into
-        it.</dd></div>
-      <div class="rulerow"><dt>The two passes</dt><dd>Go once from Q1 to Q22 and solve only what you
-        are certain of. For everything else, say which it is: <b>Come back to this</b> for a question
-        you will return to on the second pass, <b>Leave this one</b> for a question you are done with.
-        Both still count as answered if you have entered something. <b>Clear Response</b> empties
-        it.</dd></div>
+        Click the answer box to open the on-screen keypad; the physical keyboard does not type
+        into it.</dd></div>
+      <div class="rulerow"><dt>Calculator</dt><dd>An on-screen calculator is available from
+        the <b>Calculator</b> button at the <b>top of the screen, beside the clock</b>. It
+        works with the mouse only, exactly as it does in the real exam, and it can be dragged
+        out of the way.</dd></div>
+      <div class="rulerow"><dt>Flagging</dt><dd><b>Come back to this</b> marks a question you
+        intend to return to; its square in the palette turns <b>purple</b>. <b>Leave this
+        one</b> marks a question you are finished with; its square turns <b>grey</b>.
+        Neither marker changes your answer or your score. <b>Clear response</b> empties the
+        answer and leaves any marker in place.</dd></div>
+      <div class="rulerow"><dt>Your paper's order</dt><dd>Every candidate gets the same 22
+        questions in a <b>different order</b>, and the options inside a question are ordered
+        differently too. Your neighbour's Question 5 is not your Question 5. Each question
+        also shows a short <b>question code</b> next to its topic &mdash; quote that code, not
+        the number on your screen, if you need to raise something with your
+        invigilator.</dd></div>
       <div class="rulerow"><dt>Once you begin</dt><dd>The paper takes over the screen and the browser
         Back button stops working until you submit. Leaving the page still ends the attempt.</dd></div>
       <div class="rulerow"><dt>If it crashes</dt><dd>Your answers are saved on this computer every
@@ -660,18 +708,12 @@ section.blk:last-of-type{border-bottom:0}
         running while you are away, as it would in the hall &mdash; so come straight back.</dd></div>
       <div class="rulerow"><dt>Keyboard</dt><dd><span class="mono">1&ndash;4</span> select an option,
         <span class="mono">Enter</span> save and next, <span class="mono">&larr; &rarr;</span> move between
-        questions, <span class="mono">M</span> mark for review.</dd></div>
+        questions, <span class="mono">M</span> flag the current
+        question as <b>Come back to this</b>.</dd></div>
       <div class="rulerow"><dt>What is recorded</dt><dd>Time on every question, every visit, and every
         option you select or change. That is what the analysis at the end is built from, and it is
         worthless if you look anything up. Sit it as an exam.</dd></div>
     </dl>
-
-    <div class="callout">
-      <h4>The paper is longer than the clock, on purpose</h4>
-      <p>At a strong candidate's pace these 22 questions need about 43 minutes. You have 40.
-        Nobody is expected to attempt all of them. The report you get at the end spends as much
-        space on the questions you should have left alone as on the ones you got wrong.</p>
-    </div>
 
     <div style="margin-top:26px">
       <div class="eyebrow" style="color:var(--ink-3)">Palette colours</div>
@@ -679,8 +721,11 @@ section.blk:last-of-type{border-bottom:0}
         <span class="lg"><i class="sw" style="background:#fff"></i> Not visited</span>
         <span class="lg"><i class="sw" style="background:#EDE9E0"></i> Seen, not answered</span>
         <span class="lg"><i class="sw" style="background:var(--ok);border-color:var(--ok)"></i> Answered</span>
-        <span class="lg"><i class="sw" style="background:#6B3FA0;border-color:#6B3FA0"></i> Marked for review</span>
+        <span class="lg"><i class="sw" style="background:#6B3FA0;border-color:#6B3FA0"></i> Come back to this</span>
+        <span class="lg"><i class="sw" style="background:var(--ink-3);border-color:var(--ink-3)"></i> Leave this one</span>
       </div>
+      <p class="hint" style="margin-top:9px">A purple or grey square with a small green dot
+        in the corner means that question is flagged <em>and</em> answered.</p>
     </div>
 
     <!-- The passcode is checked on the server; it is not in this file. -->
@@ -710,6 +755,7 @@ section.blk:last-of-type{border-bottom:0}
     <div class="tb-l"><span class="tb-brand">IMS</span>
       <span class="tb-title">Algebra Sectional &middot; Most Expected CAT 2026 — Recalibrated Set</span></div>
     <div class="tb-r">
+      <button class="tb-calc" id="calcbtn">Calculator</button>
       <span class="tb-pin" id="pinlbl"></span>
       <span class="timer mono" id="timer">40:00</span>
     </div>
@@ -737,7 +783,6 @@ section.blk:last-of-type{border-bottom:0}
     </aside>
   </div></div>
   <div class="qactions"><div class="inner">
-    <button class="btn btn-ghost" id="calcbtn">Calculator</button>
     <button class="btn btn-ghost" id="a-clear">Clear response</button>
     <button class="btn btn-ghost" id="a-come">Come back to this</button>
     <button class="btn btn-ghost" id="a-leave">Leave this one</button>
@@ -1197,7 +1242,7 @@ const N = QS.length;
    enrolment gate: it runs locally, so opening the paper never touches the network and
    never queues behind anyone else. Student names are deliberately NOT here; they are
    fetched afterwards and never block the start. */
-const PINS = ["fdeddd50879e77b7", "852da58eacf0efa8", "e3a5c27909af22a6", "efe974f3e129c30f"];
+const PINS = ["fdeddd50879e77b7", "852da58eacf0efa8", "e3a5c27909af22a6", "efe974f3e129c30f", "0f8727cc1f537217", "e67958b3b0a1f112", "31812838648b7ad0", "b1ca9a6146060342", "9a5b40260471811b", "130929febb71b7a8", "125abfb3b3ec90bc", "700ce9fa78a233b6", "dc7fb612718fec9c"];
 
 /* ---------------- state ---------------- */
 const S = {
@@ -1521,7 +1566,12 @@ async function doReview(pin) {
       return;
     }
     S.name = j.name || '';
-    S.ended = true;                       // nothing here should try to save or submit
+    S.ended = true;
+    /* render() prints new Date(S.startedAt). On the submit path it was set when the
+       paper began; on THIS path the page was freshly loaded and never started one, so
+       it was 0 and every reopened report read 1 January 1970. The Worker already
+       sends the timestamp this needs. */
+    S.startedAt = j.received ? new Date(j.received).getTime() : Date.now();                       // nothing here should try to save or submit
     const d = j.received ? new Date(j.received) : null;
     document.body.insertAdjacentHTML('afterbegin',
       '<div class="revbar"><div class="wrap"><span><b>Reviewing a completed attempt</b>' +
@@ -3016,8 +3066,12 @@ function renderTriage(tri) {
       'paper. Everything else on this page is final now.</div>';
     return;
   }
-  const band = tri.score >= 80 ? 'Sharp' : tri.score >= 65 ? 'Solid'
-             : tri.score >= 50 ? 'Leaky' : 'Costly';
+  /* No band label this cycle. The cuts (80/65/50) were set before anyone had sat a
+     paper. The first real attempt - 46/66, 80% accuracy, full clock used - scored 51 and
+     would have read "Leaky". Time on a wrong answer is credited at zero, so four wrong
+     answers alone consumed 35% of that clock: the label named the wrong cause. The score
+     and the three bars still show. Cut the bands from the real distribution after the
+     event, then bring the label back. */
   const d = tri.detail || {}, T = tri.clock || 2400;
   const pc = x => Math.max(0, Math.min(100, (x / T) * 100));
   const get = k => (tri.buckets || []).find(b => b.key === k) || { spent: 0, credited: 0, n: 0 };
@@ -3043,7 +3097,7 @@ function renderTriage(tri) {
 
   box.innerHTML =
     '<div class="trihead">' +
-      '<div><div class="triband">' + band + '</div>' +
+      '<div>' +
       '<div class="triscore">' + tri.score + '<small>/100</small></div></div>' +
       '<p class="trisum">Your forty minutes is an account. Every second went to a question ' +
       'you got right, a question you got wrong, or a question you decided not to try &mdash; ' +
@@ -3111,20 +3165,10 @@ function drawTriage(A) {
       stroke: m >= 0 ? '#1B5E3F' : '#C00000', 'stroke-width': 2, 'stroke-dasharray': '5 4',
       opacity: .7 }));
   }
-  /* The same points laid out in the order the paper actually handed them over: the walk this
-     student would have made by simply pressing Next twenty-two times. Their own line is only
-     worth something to the extent it beats this one. */
-  if (typeof A.rhoBase === 'number' && pts.length > 1 && pts.every(p => p.shown)) {
-    const walk = pts.slice().sort((a, b) => a.shown - b.shown);
-    const n2 = walk.length, mx2 = (n2 + 1) / 2;
-    const my2 = walk.reduce((a, p) => a + p.rate, 0) / n2;
-    let nu = 0, de = 0;
-    walk.forEach((p, k) => { nu += (k + 1 - mx2) * (p.rate - my2); de += (k + 1 - mx2) ** 2; });
-    const m2 = de ? nu / de : 0;
-    svg.appendChild(mk('line', { x1: x(1), y1: y(my2 + m2 * (1 - mx2)),
-      x2: x(maxO), y2: y(my2 + m2 * (maxO - mx2)),
-      stroke: '#8A8578', 'stroke-width': 1.5, 'stroke-dasharray': '2 5', opacity: .75 }));
-  }
+  /* The baseline walk used to be drawn here as a second, grey line. It was a regression
+     over the order the paper DEALT the questions, drawn on an x-axis labelled "order in
+     which you answered them" - fitted against an axis that was not its own. The number it
+     represents is still reported in the caption below, where it is honest. */
   pts.forEach(p => {
     const dot = mk('circle', { cx: x(p.ansOrder), cy: y(p.rate), r: 8,
       fill: CL[p.cls].c, opacity: .9 });
@@ -3165,11 +3209,12 @@ function drawTriage(A) {
     (A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
       (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '') +
     ((typeof A.rho === 'number' && typeof A.rhoBase === 'number')
-      ? '<span class="seqmath">The order you actually took them in scores ' + A.rho.toFixed(2) +
-        '. Working straight through the paper you were dealt, front to back, would have scored ' +
-        A.rhoBase.toFixed(2) + ' on its own — the grey dashed line. Every student sits a ' +
-        'different order, so you are measured on how far you improved on your own, not on the one ' +
-        'you happened to be given.</span>'
+      ? '<span class="seqmath">How this is worked out: the order you actually answered in
+        scores ' + A.rho.toFixed(2) + ' against the difficulty of the questions. Working
+        straight through your own paper, front to back, would have scored ' +
+        A.rhoBase.toFixed(2) + ' on its own. The figure above is how much of the room
+        between that starting point and a perfect +1.00 you actually closed. Every student
+        is dealt a different order, so you are measured against your own.</span>'
       : '');
   box.appendChild(note);
 }
@@ -3469,5 +3514,17 @@ flushParked();
 offerResume();
 
 </script>
+
+<!-- Computer-only gate. Hidden above the breakpoint; it is an overlay, so nothing
+     else on this page is altered, hidden or reflowed. -->
+<div id="smallscreen">
+  <div class="ss-brand">IMS &middot; CAT 2026</div>
+  <div class="ss-h">This paper is sat on a computer.</div>
+  <p>The CAT is taken on a desktop machine, and this test is built to mirror it &mdash; the forty-minute clock, the on-screen calculator and the question palette all need a full screen and a mouse.</p>
+  <p>Open this link on a laptop or a desktop computer.</p>
+  <div class="ss-url" id="ss-url"></div>
+  <div class="ss-foot">Your attempt report opens on the same machine. It is released by your faculty once the batch has finished.</div>
+</div>
+<script>try{document.getElementById("ss-url").textContent=location.href.split("?")[0];}catch(e){}</script>
 </body>
 </html>
