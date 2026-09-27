@@ -107,6 +107,28 @@ input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3p
 .rank{display:block;margin-top:7px;font-family:var(--f-mono,ui-monospace,monospace);
   font-size:calc(13.12*var(--z));letter-spacing:.04em;color:var(--navy,#1F3864)}
 .rank b{font-size:calc(15*var(--z));font-weight:700}
+
+/* ============ COMPUTER-ONLY GATE ============ */
+#smallscreen{display:none;position:fixed;inset:0;z-index:9999;
+  background:#1F3864;color:#fff;padding:34px 26px;overflow-y:auto;
+  flex-direction:column;justify-content:center;align-items:flex-start;
+  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+#smallscreen .ss-brand{font-weight:700;font-size:13px;letter-spacing:.2em;
+  text-transform:uppercase;color:#F0B8B8}
+#smallscreen .ss-h{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:29px;
+  line-height:1.15;letter-spacing:-.02em;margin:14px 0 0}
+#smallscreen p{font-size:15px;line-height:1.62;color:rgba(255,255,255,.78);
+  margin:14px 0 0;max-width:34em}
+#smallscreen .ss-url{margin:22px 0 0;padding:12px 14px;width:100%;
+  border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13px;
+  color:#fff;word-break:break-all}
+#smallscreen .ss-foot{margin:22px 0 0;font-size:13px;line-height:1.55;
+  color:rgba(255,255,255,.55);max-width:34em}
+@media (max-width:700px),(max-height:480px){
+  #smallscreen{display:flex}
+  body{overflow:hidden}
+}
 </style>
 </head>
 <body>
@@ -131,12 +153,16 @@ input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3p
       and which you let go.</p>
   </div>
   <div class="pincard">
-    <h2>Enter your IMS PIN</h2>
-    <p>The PIN on your IMS record. It identifies you and pulls up your papers.</p>
+    <h2>Sign in</h2>
+    <p>Your IMS PIN and the password on the slip your centre gave you. You sign in once
+      here &mdash; the papers will not ask again.</p>
     <label for="pin">IMS PIN</label>
     <input type="text" id="pin" autocomplete="off" autocapitalize="characters"
            spellcheck="false" placeholder="IMS0000000000">
-    <button class="btn btn-wide" id="go">Continue</button>
+    <label for="pw">Password</label>
+    <input type="password" id="pw" autocomplete="off" autocapitalize="none"
+           spellcheck="false" placeholder="from your slip">
+    <button class="btn btn-wide" id="go">Sign in</button>
     <div class="warn" id="warn"></div>
     <p class="pwhint">Want to change your password? <a href="Account/">Do it here</a>.
       You will need the one on your slip. Lost it — ask your faculty to issue a new one.</p>
@@ -163,17 +189,57 @@ const REASON = {
   unknown: 'That PIN is not on the IMS enrolment list. Check it against your record — if it ' +
            'is right, tell your centre and they will add you.',
   inactive: 'That PIN is no longer active. Please speak to your centre.',
-  missing: 'Enter your IMS PIN to continue.'
+  missing: 'Enter your IMS PIN and your password to continue.',
+  bad_password: 'That password does not match this PIN. Check the slip your centre gave ' +
+                'you — if you have lost it, ask your faculty to issue a new one.'
 };
+
+/* Same slot the paper pages read (TOKKEY in template.html). Writing the token here is
+   what lets a paper skip its own sign-in: it finds this and goes straight through. The
+   token is signed by the Worker and re-checked server-side when a paper unlocks, so this
+   is a convenience, never the security boundary. */
+const TOKKEY = 'ims_cat26_session';
+function saveSession(pin, token) {
+  try { localStorage.setItem(TOKKEY, JSON.stringify({ pin: pin, token: token })); } catch (e) {}
+}
+function loadSession(pin) {
+  try {
+    const v = JSON.parse(localStorage.getItem(TOKKEY) || 'null');
+    if (v && v.pin === pin && v.token) return v.token;
+  } catch (e) {}
+  return '';
+}
+function dropSession() {
+  try { localStorage.removeItem(TOKKEY); } catch (e) {}
+}
 
 function warn(msg) { const w = $('#warn'); w.textContent = msg; w.classList.add('on'); }
 function clearWarn() { $('#warn').classList.remove('on'); }
 
-async function signIn(pin, silent) {
+async function signIn(pin, pw, silent) {
   clearWarn();
   if (!pin || pin.length < 4) { if (!silent) warn(REASON.missing); return false; }
   $('#go').disabled = true; $('#go').textContent = 'Checking…';
   try {
+    /* The password is checked FIRST. Until this call succeeds nothing about the
+       student is fetched or shown — the old page asked only for a PIN and handed back
+       name, papers, scores and rank to anyone who typed one. */
+    if (!silent) {
+      const pr = await fetch(api('action=pw_check'), {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ pin: pin, password: pw || '' })
+      });
+      const pj = await pr.json();
+      if (!pj.ok) {
+        warn(REASON[pj.reason] || 'That PIN and password could not be verified.');
+        const f = $('#pw'); if (f) { f.value = ''; f.focus(); }
+        return false;
+      }
+      saveSession(pin, pj.token);
+    } else if (!loadSession(pin)) {
+      /* Restoring a tab with no token: make them sign in properly. */
+      return false;
+    }
     const r = await fetch(api('action=hub&pin=' + encodeURIComponent(pin)));
     const j = await r.json();
     if (!j.ok) { if (!silent) warn(REASON[j.reason] || 'That PIN could not be verified.'); return false; }
@@ -184,7 +250,7 @@ async function signIn(pin, silent) {
     if (!silent) warn('Could not reach the IMS server. Check your connection and try again.');
     return false;
   } finally {
-    $('#go').disabled = false; $('#go').textContent = 'Continue';
+    $('#go').disabled = false; $('#go').textContent = 'Sign in';
   }
 }
 
@@ -271,10 +337,14 @@ $('#tiles').addEventListener('click', e => {
   location.href = href + (b.getAttribute('data-review') ? '?review=1' : '');
 });
 
-$('#go').onclick = () => signIn($('#pin').value.trim().toUpperCase());
-$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#go').click(); });
+$('#go').onclick = () => signIn($('#pin').value.trim().toUpperCase(), $('#pw').value);
+$('#pin').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { if (!$('#pw').value) { $('#pw').focus(); return; } $('#go').click(); }
+});
+$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#go').click(); });
 $('#signout').onclick = () => {
   try { sessionStorage.removeItem(KEY); } catch (e) {}
+  dropSession();                 // the papers must stop trusting this tab too
   location.reload();
 };
 
@@ -282,9 +352,22 @@ $('#signout').onclick = () => {
 (() => {
   let saved = null;
   try { saved = sessionStorage.getItem(KEY); } catch (e) {}
-  if (saved) { $('#pin').value = saved; signIn(saved, true); }
+  if (saved && loadSession(saved)) { $('#pin').value = saved; signIn(saved, '', true); }
+  else if (saved) { $('#pin').value = saved; $('#pw').focus(); }
   else $('#pin').focus();
 })();
 </script>
+
+<!-- Computer-only gate. Hidden above the breakpoint; it is an overlay, so nothing
+     else on this page is altered, hidden or reflowed. -->
+<div id="smallscreen">
+  <div class="ss-brand">IMS &middot; CAT 2026</div>
+  <div class="ss-h">These papers are sat on a computer.</div>
+  <p>The CAT is taken on a desktop machine, and these sectionals are built to mirror it &mdash; the clock, the on-screen calculator and the question palette all need a full screen and a mouse.</p>
+  <p>Open this link on a laptop or a desktop computer.</p>
+  <div class="ss-url" id="ss-url"></div>
+  <div class="ss-foot">Open this link on a laptop or desktop, or sit the paper at your centre.</div>
+</div>
+<script>try{document.getElementById("ss-url").textContent=location.href.split("?")[0];}catch(e){}</script>
 </body>
 </html>
