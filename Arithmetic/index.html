@@ -3204,12 +3204,12 @@ function drawTriage(A) {
     (A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
       (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '') +
     ((typeof A.rho === 'number' && typeof A.rhoBase === 'number')
-      ? '<span class="seqmath">How this is worked out: the order you actually answered in
-        scores ' + A.rho.toFixed(2) + ' against the difficulty of the questions. Working
-        straight through your own paper, front to back, would have scored ' +
-        A.rhoBase.toFixed(2) + ' on its own. The figure above is how much of the room
-        between that starting point and a perfect +1.00 you actually closed. Every student
-        is dealt a different order, so you are measured against your own.</span>'
+      ? '<span class="seqmath">How this is worked out: the order you actually answered in ' +
+        'scores ' + A.rho.toFixed(2) + ' against the difficulty of the questions. Working ' +
+        'straight through your own paper, front to back, would have scored ' +
+        A.rhoBase.toFixed(2) + ' on its own. The figure above is how much of the room ' +
+        'between that starting point and a perfect +1.00 you actually closed. Every ' +
+        'student is dealt a different order, so you are measured against your own.</span>'
       : '');
   box.appendChild(note);
 }
