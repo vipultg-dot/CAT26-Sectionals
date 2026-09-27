@@ -2311,9 +2311,15 @@ function calcShow(on) {
       /* First open: bottom-left of the question pane. Clear of the palette and the Submit
          button on the right, and clear of the action bar below. The student can drag it
          anywhere from there, and it stays where they put it for the rest of the paper. */
-      const h = el.offsetHeight || 451;
-      CALC.x = 24;
-      CALC.y = Math.max(70, window.innerHeight - h - 78);
+      /* Open it near the button that summons it. That button moved to the top bar, so
+         opening bottom-left meant clicking one corner and finding the calculator in the
+         other. It now sits at the right edge of the question pane, clear of the palette,
+         and the student can drag it anywhere from there. */
+      const w = el.offsetWidth || 290, ch = el.offsetHeight || 451;
+      const pal = document.querySelector('.pal');
+      const edge = pal ? pal.getBoundingClientRect().left : window.innerWidth;
+      CALC.x = Math.max(24, edge - w - 24);
+      CALC.y = Math.max(70, Math.min(96, window.innerHeight - ch - 24));
     }
     calcMove(CALC.x, CALC.y);
     calcPaint();
@@ -2968,9 +2974,32 @@ function render(A) {
 
   /* verdict */
   const V = $('#verdict'); V.innerHTML = '';
-  const box = el('div', 'verdict' + (A.wasted < 300 ? ' good' : ''));
+  /* THREE cases, not two. "Wasted" counts only time SPENT badly, so a candidate who
+     answers four questions and submits after three minutes wastes almost nothing — and was
+     congratulated on their discipline, while the triage score, which DOES count the clock
+     they handed back, scored that same attempt 5 out of 100. One screen, two opposite
+     verdicts, and it is the same blind spot that sank the first triage model. Unused clock
+     is a decision not to try. It is read first and it is never praised. */
+  const idle = Math.max(0, CONFIG.DURATION - A.used);
+  const gaveBack = idle > 300;
+  const box = el('div', 'verdict' + (!gaveBack && A.wasted < 300 ? ' good' : ''));
   const h = el('h4'); const p1 = el('p'); const p2 = el('p');
-  if (A.wasted < 300) {
+  if (gaveBack) {
+    const unatt = N - A.attempted;
+    const cb = A.cheap.length ? A.cheap[0].bench : 0;
+    const buys = cb ? Math.floor(idle / cb) : 0;
+    h.textContent = 'You handed back ' + human(idle) + ' of the forty minutes';
+    p1.innerHTML = 'This paper is longer than its clock, so there is no point at which it is ' +
+      'finished. You submitted with <b>' + human(idle) + '</b> unspent and <b>' + unatt +
+      '</b> question' + (unatt === 1 ? '' : 's') + ' never answered.' +
+      (buys > 0 && A.cheap.length
+        ? ' The cheapest of those was <b>Q' + A.cheap[0].n + '</b> (' + A.cheap[0].sub +
+          ', rated ' + A.cheap[0].rate + ', benchmark ' + A.cheap[0].bench + 's). At that ' +
+          'price the time you gave back was worth about <b>' + buys + ' more ' +
+          (buys === 1 ? 'attempt' : 'attempts') + '</b> \u2014 up to <b>+' + (buys * 3) +
+          ' marks</b>.'
+        : '');
+  } else if (A.wasted < 300) {
     h.textContent = 'Your time went where it should have';
     p1.innerHTML = 'Only <b>' + human(A.wasted) + '</b> of your forty minutes produced no marks. ' +
       'That is tight discipline and it is the hardest part of this paper to get right.';
@@ -2981,7 +3010,7 @@ function render(A) {
       'That is <b>' + Math.round(A.wasted / A.used * 100) + '%</b> of the paper.';
   }
   box.appendChild(h); box.appendChild(p1);
-  if (A.couldBuy > 0 && A.cheap.length) {
+  if (!gaveBack && A.couldBuy > 0 && A.cheap.length) {
     p2.innerHTML = 'The cheapest question you never answered was <b>Q' + A.cheap[0].n +
       '</b> (' + A.cheap[0].sub + ', rated ' + A.cheap[0].rate + ', benchmark ' +
       A.cheap[0].bench + 's). At that price, the wasted time was worth about <b>' +
@@ -3201,7 +3230,7 @@ function drawTriage(A) {
   const note = el('p', 'plotnote');
   note.innerHTML = '<b>Sequence: ' +
     (ra === null ? '—' : (ra > 0 ? '+' : '') + ra.toFixed(2)) + '.</b> ' + verdict +
-    (A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
+    (ra !== null && A.hardEarly ? ' You opened <b>' + A.hardEarly + '</b> question' +
       (A.hardEarly === 1 ? '' : 's') + ' rated 7 or 8 inside the first ten minutes.' : '') +
     ((typeof A.rho === 'number' && typeof A.rhoBase === 'number')
       ? '<span class="seqmath">How this is worked out: the order you actually answered in ' +
