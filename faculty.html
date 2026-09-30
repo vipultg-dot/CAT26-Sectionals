@@ -52,6 +52,14 @@ h1{font:400 27px/1.2 var(--f-ser);margin:8px 0 2px}
 .b-closed{background:#EFEAE0;color:#6B6252}
 .b-open{background:var(--ok);color:#fff}
 .b-rel{background:#6A4FA3;color:#fff}
+.b-px2{background:var(--danger);color:#fff}
+.b-px1{background:var(--warn);color:#fff}
+.b-pxl{background:#EFEAE0;color:#6B6252}
+.xrow{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:8px 0}
+.xrow.px2{border-color:#E4B9B6;background:var(--danger-soft)}
+.xrow .xh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.xrow .xn{font:600 15px/1.3 var(--f-sans)}
+.xrow .xm{font:12px/1.55 var(--f-mono);color:var(--mute);margin-top:4px}
 .b-notready{background:var(--warn-soft);color:var(--warn)}
 
 .stats{display:flex;gap:18px;margin:12px 0 0;flex-wrap:wrap;font:12px var(--f-mono);color:var(--mute)}
@@ -94,6 +102,19 @@ dialog::backdrop{background:rgba(22,32,46,.55)}
 .dlgacts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .hide{display:none !important}
 .foot{margin:34px 0 0;font:12px/1.6 var(--f-mono);color:var(--mute)}
+
+/* ============ DESKTOP WIDENING ============ */
+@media (min-width:1100px){
+  .wrap{max-width:1180px}
+  #papers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;
+    align-items:start}
+  #papers .card{margin:0}
+  #tools{max-width:780px}
+}
+@media (min-width:1560px){
+  .wrap{max-width:1500px}
+  #papers{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 </style>
 </head>
 <body>
@@ -122,6 +143,18 @@ dialog::backdrop{background:rgba(22,32,46,.55)}
   <div id="papers"></div>
 
   <div id="tools" class="hide">
+    <h2>Proctoring &mdash; flagged attempts</h2>
+    <p>Every submitted paper whose student left the test window, left full screen, lost focus
+       or closed and reopened the page. A paper marked <b>Submitted on 2nd exit</b> ended
+       itself and cannot be continued &mdash; Reset below gives a full resit only.
+       Refreshes with the page.</p>
+    <div class="rowin">
+      <select id="xpaper"></select>
+      <button class="act ghost" id="xgo">Refresh flags</button>
+    </div>
+    <div id="xnote"></div>
+    <div id="xlist"></div>
+
     <h2>Reset one student</h2>
     <p>For a machine that died mid-paper. It deletes their attempt and their passcode record
        so they can sit it again. You will be shown who and what before anything goes.</p>
@@ -320,6 +353,7 @@ async function load(){
     }
     papers = j.defined;
     render();
+    loadFlags();
     setStatus('Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
   } catch(e){
     setStatus('Could not reach the IMS server. Retrying.', 'err');
@@ -483,6 +517,94 @@ async function doReissue(){
     '</div>';
   $('#ipin').value = '';
 }
+
+/* ---------------- proctoring flags ----------------
+   The player puts its proctoring record at the front of the ua field it submits, and the
+   Worker stores that verbatim. This reads it back through the existing export feed, in
+   deltas: the first load takes everything, every refresh after that only the new rows. */
+/* ==== PX PARSE — must stay identical to pxParse() in template.html; test_proctor.mjs checks. ==== */
+function pxParse(ua) {
+  ua = String(ua || '');
+  if (ua.indexOf('px=') !== 0) return null;
+  const head = ua.split(' | ')[0], o = {};
+  head.split(';').forEach(kv => {
+    const i = kv.indexOf('=');
+    if (i < 0) return;
+    const k = kv.slice(0, i), v = kv.slice(i + 1);
+    o[k] = (k === 'px' || k === 'end') ? v : (v === '' ? null : Number(v));
+  });
+  return o;
+}
+/* ==== END PX PARSE ==== */
+let xrows = [], xlast = 0, xseen = 0, xbusy = false;
+async function loadFlags(){
+  if (xbusy || !KEY) return;
+  xbusy = true; $('#xgo').disabled = true;
+  try {
+    for (let page = 0; page < 60; page++){
+      const j = await api('export&after=' + xlast + '&limit=100');
+      if (!j.ok){ $('#xnote').innerHTML = '<div class="note err">Could not read attempts: ' +
+        String(j.reason || 'error') + '</div>'; break; }
+      const rows = j.rows || [];
+      rows.forEach(r => {
+        xseen++;
+        if (r.practice) return;
+        const t = pxParse(r.ua);
+        if (!t) return;
+        if (!(t.x || t.fs || t.bl || t.rs || t.end === 'proctor')) return;
+        xrows.push({ pin: r.pin, name: r.name, batch: r.batch, centre: r.centre, paper: r.paper,
+                     score: r.score, received: r.received, t });
+      });
+      xlast = j.lastId || xlast;
+      if (rows.length < 100) break;
+    }
+    paintFlags();
+  } catch(e){
+    $('#xnote').innerHTML = '<div class="note err">Could not reach the IMS server for the flags.</div>';
+  } finally { xbusy = false; $('#xgo').disabled = false; }
+}
+function paintFlags(){
+  const sel = $('#xpaper'), keep = sel.value;
+  sel.innerHTML = '';
+  const all = el('option', null, 'All papers'); all.value = ''; sel.appendChild(all);
+  papers.forEach(p => { const o = el('option', null, p.name); o.value = p.id; sel.appendChild(o); });
+  sel.value = keep;
+  const pick = sel.value;
+  const rank = r => r.t.end === 'proctor' ? 0 : (r.t.px === 'enforce' && r.t.x) ? 1 : r.t.x ? 2 : 3;
+  const list = xrows.filter(r => !pick || r.paper === pick)
+    .sort((a, b) => rank(a) - rank(b) || String(b.received).localeCompare(String(a.received)));
+  const n2 = list.filter(r => r.t.end === 'proctor').length;
+  $('#xnote').innerHTML = '<div class="note ' + (n2 ? 'warn' : 'ok') + '">' + xseen +
+    ' attempts read &middot; ' + list.length + ' flagged' + (n2 ? ' &middot; <b>' + n2 +
+    ' submitted on a 2nd exit</b>' : '') + '</div>';
+  const host = $('#xlist'); host.innerHTML = '';
+  const pname = id => (papers.find(p => p.id === id) || {}).name || id;
+  list.forEach(r => {
+    const t = r.t, box = el('div', 'xrow' + (t.end === 'proctor' ? ' px2' : ''));
+    const h = el('div', 'xh');
+    h.appendChild(el('span', 'xn', (r.name || '') + ' · ' + r.pin));
+    let bl, bc;
+    if (t.end === 'proctor'){ bl = 'Submitted on 2nd exit'; bc = 'b-px2'; }
+    else if (t.px === 'enforce' && t.x){ bl = 'Warned once'; bc = 'b-px1'; }
+    else if (t.x){ bl = 'Left window ×' + t.x + ' (log only)'; bc = 'b-pxl'; }
+    else if (t.rs){ bl = 'Closed & resumed'; bc = 'b-pxl'; }
+    else { bl = 'Full screen / focus'; bc = 'b-pxl'; }
+    h.appendChild(el('span', 'badge ' + bc, bl));
+    box.appendChild(h);
+    const at = s => s === null || s === undefined ? '' : mmss(s);
+    const bits = [pname(r.paper), (r.batch || '') + (r.centre ? ' · ' + r.centre : '')];
+    if (t.x) bits.push('left window ' + t.x + '× (at ' + [at(t.t1), at(t.t2)].filter(Boolean).join(', ') +
+      ' into the paper; ' + mmss(t.aw || 0) + ' away)');
+    if (t.fs) bits.push('left full screen ' + t.fs + '×');
+    if (t.bl) bits.push('lost focus ' + t.bl + '×');
+    if (t.rs) bits.push('closed & resumed ' + t.rs + '×');
+    bits.push('score ' + r.score + ' · ended by ' + (t.end || '?'));
+    box.appendChild(el('div', 'xm', bits.filter(Boolean).join('  ·  ')));
+    host.appendChild(box);
+  });
+}
+$('#xgo').onclick = loadFlags;
+$('#xpaper').onchange = paintFlags;
 
 $('#rgo').onclick = doReset;
 $('#igo').onclick = doReissue;
