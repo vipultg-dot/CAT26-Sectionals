@@ -151,6 +151,33 @@ h2.disp{font-family:var(--f-disp);font-weight:600;font-size:clamp(28px,3.4vw,40p
 .sw{width:20px;height:20px;border:1px solid var(--rule);display:inline-block}
 .startrow{margin-top:38px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
 .startrow .btn{padding:16px 34px;font-size:calc(15*var(--z))}
+/* ---- paged instructions ----
+   Five .ipage sections share one #instr screen; exactly one carries .on. The passcode
+   box and #startrow live on the last page, so they stay in the DOM at all times and
+   unlockPaper()/#begin keep working untouched. */
+.isteps{display:flex;flex-wrap:wrap;gap:0;margin:24px 0 0;padding:0;list-style:none;
+  border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.isteps li{flex:1 1 0;min-width:92px;padding:11px 4px 9px;text-align:center;cursor:pointer;
+  font-size:calc(11.4*var(--z));letter-spacing:.11em;text-transform:uppercase;font-weight:600;
+  color:var(--ink-3);border-bottom:2px solid transparent;-webkit-user-select:none;user-select:none}
+.isteps li:hover{color:var(--navy)}
+.isteps li.done{color:var(--ink-2)}
+.isteps li.on{color:var(--navy);border-bottom-color:var(--red)}
+.ipage{display:none}
+.ipage.on{display:block}
+.ipage .rulerow dt .sw{vertical-align:-4px;margin-right:8px;width:16px;height:16px}
+.ipage .rulerow dt{text-transform:none;letter-spacing:.01em;font-size:calc(13.4*var(--z));
+  color:var(--navy)}
+.ipage .rulerow dt.lbl{text-transform:uppercase;letter-spacing:.13em;
+  font-size:calc(12.12*var(--z));color:var(--ink-3)}
+.inav{margin-top:36px;padding-top:20px;border-top:1px solid var(--rule);
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.inav .isp{flex:1 1 auto}
+.icount{font-family:var(--f-mono);font-size:calc(12.84*var(--z));color:var(--ink-3)}
+.inav .btn-ghost:disabled{background:transparent;color:var(--rule);border-color:var(--rule-2);
+  cursor:default}
+.ipage .rulerow{grid-template-columns:176px 1fr}
+.inav .btn:disabled{background:var(--rule-2);color:var(--ink-3);border:1.5px solid var(--rule-2)}
 .startnote{font-size:calc(13.2*var(--z));color:var(--ink-3);max-width:40ch}
 
 /* ---------------- TEST ---------------- */
@@ -671,80 +698,159 @@ section.blk:last-of-type{border-bottom:0}
     </div>
   </div></div>
   <div class="wrap">
-    <div class="eyebrow">General instructions</div>
-    <h2 class="disp">Read this once. The clock starts when you press Begin.</h2>
-    <p class="lead">This is a sectional paper, not a full mock. It behaves like one section of the
-      real exam and it is scored the same way.</p>
+    <div class="eyebrow">Instructions</div>
 
-    <dl class="rulegrid">
-      <div class="rulerow"><dt>Duration</dt><dd><b>40 minutes</b>, counted down on screen. When it reaches
-        zero the paper submits itself &mdash; whatever is on screen at that moment is recorded.</dd></div>
-      <div class="rulerow"><dt>Questions</dt><dd><b>22</b>, shown one at a time. You may move between them
-        freely using the palette on the right, in any order, as often as you like.</dd></div>
-      <div class="rulerow"><dt>Marking</dt><dd>Multiple choice: <b>+3</b> correct, <b>&minus;1</b> wrong.
-        TITA questions carry <b>no negative marking</b> &mdash; every TITA answer is a whole number.
-        Click the answer box to open the on-screen keypad; the physical keyboard does not type
-        into it.</dd></div>
-      <div class="rulerow"><dt>Calculator</dt><dd>An on-screen calculator is available from
-        the <b>Calculator</b> button at the <b>top of the screen, beside the clock</b>. It
-        works with the mouse only, exactly as it does in the real exam, and it can be dragged
-        out of the way.</dd></div>
-      <div class="rulerow"><dt>Flagging</dt><dd><b>Come back to this</b> marks a question you
-        intend to return to; its square in the palette turns <b>purple</b>. <b>Leave this
-        one</b> marks a question you are finished with; its square turns <b>grey</b>.
-        Neither marker changes your answer or your score. <b>Clear response</b> empties the
-        answer and leaves any marker in place.</dd></div>
-      <div class="rulerow"><dt>Your paper's order</dt><dd>Every candidate gets the same 22
-        questions in a <b>different order</b>, and the options inside a question are ordered
-        differently too. Your neighbour's Question 5 is not your Question 5. Each question
-        also shows a short <b>question code</b> next to its topic &mdash; quote that code, not
-        the number on your screen, if you need to raise something with your
-        invigilator.</dd></div>
-      <div class="rulerow"><dt>Once you begin</dt><dd>The paper takes over the screen and the browser
-        Back button stops working until you submit. Leaving the page still ends the attempt.</dd></div>
-      <div class="rulerow"><dt>If it crashes</dt><dd>Your answers are saved on this computer every
-        few seconds. If the browser or the machine dies, open this page again <b>on the same
-        computer</b> and it will offer to put you back exactly where you were. The clock keeps
-        running while you are away, as it would in the hall &mdash; so come straight back.</dd></div>
-      <div class="rulerow"><dt>Keyboard</dt><dd><span class="mono">1&ndash;4</span> select an option,
-        <span class="mono">Enter</span> save and next, <span class="mono">&larr; &rarr;</span> move between
-        questions, <span class="mono">M</span> flag the current
-        question as <b>Come back to this</b>.</dd></div>
-      <div class="rulerow"><dt>What is recorded</dt><dd>Time on every question, every visit, and every
-        option you select or change. That is what the analysis at the end is built from, and it is
-        worthless if you look anything up. Sit it as an exam.</dd></div>
-    </dl>
+    <ol class="isteps" id="isteps">
+      <li>General</li><li>The screen</li><li>Buttons</li><li>Palette</li><li>Start</li>
+    </ol>
 
-    <div style="margin-top:26px">
-      <div class="eyebrow" style="color:var(--ink-3)">Palette colours</div>
-      <div class="legend">
-        <span class="lg"><i class="sw" style="background:#fff"></i> Not visited</span>
-        <span class="lg"><i class="sw" style="background:#EDE9E0"></i> Seen, not answered</span>
-        <span class="lg"><i class="sw" style="background:var(--ok);border-color:var(--ok)"></i> Answered</span>
-        <span class="lg"><i class="sw" style="background:#6B3FA0;border-color:#6B3FA0"></i> Come back to this</span>
-        <span class="lg"><i class="sw" style="background:var(--ink-3);border-color:var(--ink-3)"></i> Leave this one</span>
+    <!-- ======== page 1 ======== -->
+    <section class="ipage on">
+      <h2 class="disp">General instructions</h2>
+      <dl class="rulegrid">
+        <div class="rulerow"><dt class="lbl">Duration</dt><dd><b>40 minutes</b>, counted down at the
+          top right of the screen. When the clock reaches zero the paper is submitted
+          automatically and whatever is on screen at that moment is recorded.</dd></div>
+        <div class="rulerow"><dt class="lbl">Questions</dt><dd><b>22</b>, shown one at a time. You may
+          move between them in any order, as often as you wish, at any point during the
+          40 minutes.</dd></div>
+        <div class="rulerow"><dt class="lbl">Marking</dt><dd>Multiple choice: <b>+3</b> for a correct
+          answer, <b>&minus;1</b> for a wrong one. TITA: <b>+3</b> for a correct answer and
+          <b>no negative marking</b>.</dd></div>
+        <div class="rulerow"><dt class="lbl">Answering</dt><dd>For a multiple-choice question, click one
+          option. For a TITA question, click the answer box to open the on-screen keypad; every
+          TITA answer is a whole number. The physical keyboard does not type into the answer
+          box.</dd></div>
+        <div class="rulerow"><dt class="lbl">Question order</dt><dd>Every candidate receives the same 22
+          questions in a <b>different order</b>, and the options within a question in a different
+          order. Each question carries a <b>question code</b> beside its topic. Quote that code, not
+          the number on your screen, when raising a query with the invigilator.</dd></div>
+        <div class="rulerow"><dt class="lbl">Once you begin</dt><dd>The paper takes over the screen and the
+          browser Back button is disabled until you submit. Leaving or reloading the page ends
+          the attempt.</dd></div>
+        <div class="rulerow"><dt class="lbl">Interruption</dt><dd>Your answers are saved on this computer
+          every few seconds. If the browser or the computer stops, open this page again <b>on the
+          same computer</b> and you will be returned to the same point. The clock continues to run
+          in the meantime.</dd></div>
+        <div class="rulerow"><dt class="lbl">What is recorded</dt><dd>Every question you open, the time
+          spent on it, and every option you select or change.</dd></div>
+      </dl>
+    </section>
+
+    <!-- ======== page 2 ======== -->
+    <section class="ipage">
+      <h2 class="disp">The screen</h2>
+      <dl class="rulegrid">
+        <div class="rulerow"><dt>Top bar</dt><dd>The name of the paper on the left. On the right, the
+          <b>Calculator</b> button, your IMS PIN and the clock.</dd></div>
+        <div class="rulerow"><dt>Question area</dt><dd>The question number, its topic, its type
+          (<b>MCQ</b> or <b>TITA</b>) and its question code, followed by the question itself and the
+          answer area. Where a question belongs to a set, the shared caselet or data block appears
+          above the question.</dd></div>
+        <div class="rulerow"><dt>Question palette</dt><dd>On the right of the screen: one numbered square
+          for each of the 22 questions, in the order your paper is dealt. Click any square to go
+          straight to that question. The colours are listed on the next page but one.</dd></div>
+        <div class="rulerow"><dt>Counters</dt><dd>Below the palette: <b>Answered</b>, <b>Marked</b> and
+          <b>Not visited</b>.</dd></div>
+        <div class="rulerow"><dt>Submit test</dt><dd>Below the counters, at the foot of the
+          palette.</dd></div>
+        <div class="rulerow"><dt>Action bar</dt><dd>Fixed along the foot of the screen: <b>Clear
+          response</b>, <b>Come back to this</b>, <b>Leave this one</b>, <b>Previous</b> and
+          <b>Save &amp; next</b>. Each is described on the next page.</dd></div>
+      </dl>
+    </section>
+
+    <!-- ======== page 3 ======== -->
+    <section class="ipage">
+      <h2 class="disp">Buttons</h2>
+      <dl class="rulegrid">
+        <div class="rulerow"><dt>Save &amp; next</dt><dd>Moves to the next question in your paper. Your
+          selection is recorded the moment you make it, whether or not you press this button. From
+          the last question it returns to the first.</dd></div>
+        <div class="rulerow"><dt>Previous</dt><dd>Moves to the previous question. From the first question
+          it moves to the last.</dd></div>
+        <div class="rulerow"><dt>Clear response</dt><dd>Removes your answer to the current question. Any
+          marker on that question is left in place.</dd></div>
+        <div class="rulerow"><dt>Come back to this</dt><dd>Marks the current question as one you intend to
+          return to, and moves to the next question. Its palette square turns <b>purple</b>. Press it
+          again on the same question to remove the marker.</dd></div>
+        <div class="rulerow"><dt>Leave this one</dt><dd>Marks the current question as one you are finished
+          with, and moves to the next question. Its palette square turns <b>grey</b>. Press it again
+          on the same question to remove the marker.</dd></div>
+        <div class="rulerow"><dt>Calculator</dt><dd>At the top of the screen, beside the clock. Opens the
+          on-screen calculator, which works with the mouse only, as it does in the examination. It
+          can be dragged out of the way and closed with the cross in its title bar.</dd></div>
+        <div class="rulerow"><dt>Submit test</dt><dd>States how many questions are answered, how many are
+          blank and how much time remains, and asks you to confirm before the paper is
+          submitted.</dd></div>
+        <div class="rulerow"><dt>Keyboard</dt><dd><span class="mono">1&ndash;4</span> select an option,
+          <span class="mono">Enter</span> save and next, <span class="mono">&larr; &rarr;</span> move
+          between questions, <span class="mono">M</span> Come back to this,
+          <span class="mono">L</span> Leave this one. The keyboard does nothing while the calculator
+          is open.</dd></div>
+      </dl>
+      <p class="hint" style="margin-top:16px">Neither marker changes your answer or your score.
+        While the current question carries a marker, its button stays highlighted.</p>
+    </section>
+
+    <!-- ======== page 4 ======== -->
+    <section class="ipage">
+      <h2 class="disp">Question palette</h2>
+      <dl class="rulegrid">
+        <div class="rulerow"><dt><i class="sw" style="background:#fff"></i>Not visited</dt>
+          <dd>You have not opened this question.</dd></div>
+        <div class="rulerow"><dt><i class="sw" style="background:#EDE9E0"></i>Seen, not answered</dt>
+          <dd>You have opened this question and left it without an answer.</dd></div>
+        <div class="rulerow"><dt><i class="sw" style="background:var(--ok);border-color:var(--ok)"></i>Answered</dt>
+          <dd>An answer is recorded for this question.</dd></div>
+        <div class="rulerow"><dt><i class="sw" style="background:#6B3FA0;border-color:#6B3FA0"></i>Come back to this</dt>
+          <dd>Marked with <b>Come back to this</b>. A small green dot in the corner of the square
+            means it is also answered.</dd></div>
+        <div class="rulerow"><dt><i class="sw" style="background:var(--ink-3);border-color:var(--ink-3)"></i>Leave this one</dt>
+          <dd>Marked with <b>Leave this one</b>. A navy border inside the square means it is also
+            answered.</dd></div>
+        <div class="rulerow"><dt><i class="sw" style="background:#fff;outline:2px solid var(--navy);outline-offset:1px"></i>Current</dt>
+          <dd>The question you are on is outlined in navy, whatever its colour.</dd></div>
+      </dl>
+      <dl class="rulegrid" style="margin-top:26px">
+        <div class="rulerow"><dt class="lbl">Counters</dt><dd><b>Answered</b> counts squares carrying an
+          answer. <b>Marked</b> counts squares marked <b>Come back to this</b>. <b>Not visited</b>
+          counts squares you have not yet opened.</dd></div>
+        <div class="rulerow"><dt class="lbl">Sets</dt><dd>Where the questions of a paper are grouped into
+          sets, a bar along the bottom edge of each square shows which set it belongs to, and the
+          sets are listed below the grid.</dd></div>
+      </dl>
+    </section>
+
+    <!-- ======== page 5 ======== -->
+    <section class="ipage">
+      <h2 class="disp">Start the paper</h2>
+
+      <!-- The passcode is checked on the server; it is not in this file. -->
+      <div class="pcbox" id="pcbox">
+        <h4>Passcode</h4>
+        <p>Your faculty will read out the passcode for this paper when the session begins at the
+          centre. The paper will not open without it.</p>
+        <div class="pcrow">
+          <input type="text" id="passcode" autocomplete="off" autocapitalize="none"
+                 spellcheck="false" placeholder="Passcode">
+          <button class="btn" id="pcgo">Unlock paper</button>
+        </div>
+        <div class="pcwarn" id="pcwarn"></div>
       </div>
-      <p class="hint" style="margin-top:9px">A purple or grey square with a small green dot
-        in the corner means that question is flagged <em>and</em> answered.</p>
-    </div>
 
-    <!-- The passcode is checked on the server; it is not in this file. -->
-    <div class="pcbox" id="pcbox">
-      <h4>Passcode</h4>
-      <p>Your faculty will read out the passcode for this paper when the session begins at the
-        centre. The paper will not open without it.</p>
-      <div class="pcrow">
-        <input type="text" id="passcode" autocomplete="off" autocapitalize="none"
-               spellcheck="false" placeholder="Passcode">
-        <button class="btn" id="pcgo">Unlock paper</button>
+      <div class="startrow" id="startrow" hidden>
+        <button class="btn btn-red" id="begin">Begin test &rarr;</button>
+        <p class="startnote">The clock starts when you press Begin. Once you begin, leaving or
+          reloading this page ends the attempt.</p>
       </div>
-      <div class="pcwarn" id="pcwarn"></div>
-    </div>
+    </section>
 
-    <div class="startrow" id="startrow" hidden>
-      <button class="btn btn-red" id="begin">Begin test &rarr;</button>
-      <p class="startnote">Once you begin, leaving or reloading this page ends the attempt.
-        Make sure you have 40 uninterrupted minutes.</p>
+    <div class="inav">
+      <button class="btn btn-ghost" id="ibk">&larr; Back</button>
+      <button class="btn" id="inx">Next &rarr;</button>
+      <span class="isp"></span>
+      <span class="icount" id="icount"></span>
     </div>
   </div>
 </div>
@@ -1989,6 +2095,39 @@ function paintWelcome() {
 
 $('#gatego').onclick = verifyPin;
 $('#welgo').onclick = () => show('instr');
+
+/* ---------------- instructions paging ----------------
+   Display only. The passcode box and #startrow sit on the last page and are never
+   removed from the DOM, so unlockPaper() and the #begin handler are unaffected. */
+(function () {
+  const pages = Array.prototype.slice.call(document.querySelectorAll('#instr .ipage'));
+  const steps = Array.prototype.slice.call(document.querySelectorAll('#isteps li'));
+  const back = $('#ibk'), next = $('#inx'), count = $('#icount');
+  if (!pages.length || !back || !next || !count) return;
+  let ip = 0;
+  function draw(scroll) {
+    for (let i = 0; i < pages.length; i++) pages[i].classList.toggle('on', i === ip);
+    for (let i = 0; i < steps.length; i++) {
+      steps[i].classList.toggle('on', i === ip);
+      steps[i].classList.toggle('done', i < ip);
+    }
+    back.disabled = (ip === 0);
+    next.disabled = (ip === pages.length - 1);
+    count.textContent = 'Page ' + (ip + 1) + ' of ' + pages.length;
+    if (scroll) window.scrollTo(0, 0);
+  }
+  function go(n) {
+    const t = Math.max(0, Math.min(pages.length - 1, n));
+    if (t === ip) return;
+    ip = t; draw(true);
+  }
+  back.onclick = () => go(ip - 1);
+  next.onclick = () => go(ip + 1);
+  for (let i = 0; i < steps.length; i++) steps[i].onclick = (function (j) {
+    return () => go(j);
+  })(i);
+  draw(false);
+})();
 $('#pcgo').onclick = unlockPaper;
 $('#passcode').addEventListener('keydown', e => { if (e.key === 'Enter') unlockPaper(); });
 
