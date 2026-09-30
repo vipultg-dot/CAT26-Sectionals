@@ -378,6 +378,16 @@ section.blk:last-of-type{border-bottom:0}
 .banner{background:#FFF6E5;border:1px solid #E8CE95;color:#6B4E12;padding:11px 16px;font-size:calc(13.56*var(--z));
   margin:14px 0 0}
 .banner.err{background:#FBF0EF;border-color:#E5B5B5;color:#6E1B1B}
+/* proctoring covers: above the calculator (60), the question panel (90) and tooltips (99) */
+.pxov{position:fixed;inset:0;z-index:9000;background:rgba(14,22,38,.78);display:flex;
+  align-items:center;justify-content:center;padding:16px}
+#pxwarn{z-index:9001}
+.pxcard{background:#fff;max-width:540px;width:100%;padding:28px 30px;border-top:5px solid var(--red);
+  box-shadow:0 18px 48px rgba(0,0,0,.35)}
+#pxfs .pxcard{border-top-color:var(--navy)}
+.pxcard h3{margin:6px 0 12px;font-size:calc(22*var(--z))}
+.pxcard p{margin:0 0 20px;line-height:1.6;font-size:calc(14.4*var(--z))}
+.pxeye{font-size:calc(11.5*var(--z));letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
 
 @media(max-width:900px){
   #gate .gatewrap{grid-template-columns:1fr}
@@ -728,6 +738,7 @@ section.blk:last-of-type{border-bottom:0}
         <div class="rulerow"><dt class="lbl">Once you begin</dt><dd>The paper takes over the screen and the
           browser Back button is disabled until you submit. Leaving or reloading the page ends
           the attempt.</dd></div>
+        <div class="rulerow" id="pxrule" hidden><dt class="lbl">Stay in the window</dt><dd id="pxruletext"></dd></div>
         <div class="rulerow"><dt class="lbl">Interruption</dt><dd>Your answers are saved on this computer
           every few seconds. If the browser or the computer stops, open this page again <b>on the
           same computer</b> and you will be returned to the same point. The clock continues to run
@@ -933,6 +944,24 @@ section.blk:last-of-type{border-bottom:0}
   </div>
 </div>
 
+<!-- ============ PROCTORING ============ -->
+<div id="pxwarn" class="pxov" hidden role="alertdialog" aria-modal="true" aria-labelledby="pxwt">
+  <div class="pxcard">
+    <div class="pxeye">Warning &middot; the only one</div>
+    <h3 id="pxwt">You left the test window.</h3>
+    <p id="pxwmsg"></p>
+    <button class="btn" id="pxwgo">I understand &mdash; back to the paper</button>
+  </div>
+</div>
+<div id="pxfs" class="pxov" hidden role="dialog" aria-modal="true" aria-labelledby="pxft">
+  <div class="pxcard">
+    <h3 id="pxft">The paper is hidden outside full screen.</h3>
+    <p>The clock is still running. Leaving full screen has been recorded; it does not count as
+       leaving the test window.</p>
+    <button class="btn" id="pxfsgo">Return to full screen</button>
+  </div>
+</div>
+
 <!-- ============ RESULTS ============ -->
 <div id="res" class="screen">
   <div class="rhero"><div class="wrap">
@@ -943,6 +972,7 @@ section.blk:last-of-type{border-bottom:0}
     <div class="scorerow" id="scorerow"></div>
   </div></div>
   <div class="wrap">
+    <div id="r-px" hidden></div>
     <div id="r-banner"></div>
     <!-- Shown only on the screen a candidate lands on straight after submitting. The
          report behind Review carries every answer, so it stays shut until faculty
@@ -1046,7 +1076,13 @@ const CONFIG = {
   SEND_JITTER: 4,
   SEND_TRIES: 4,         // send attempts before the payload is parked for a later retry
   SAVE_EVERY: 4,         // seconds between crash-recovery snapshots
-  RESUME_MAX: 24 * 3600  // an unfinished attempt older than this is dropped, never offered
+  RESUME_MAX: 24 * 3600, // an unfinished attempt older than this is dropped, never offered
+  /* Window-switch proctoring. THE KILL SWITCH: one word, nothing else needs touching.
+       'enforce'  the first exit from the test window warns; the second submits the paper
+       'log'      every exit is recorded and reported to faculty; nobody is warned or submitted
+       'off'      the player exactly as it was before proctoring: nothing recorded or shown
+     Anything else is read as 'log', so a typo can disarm the rule but never arm it. */
+  PROCTOR: 'enforce'
 };
 
 const QS = [
@@ -1354,7 +1390,10 @@ const S = {
   ev: [],                        // {t, type, q, v}
   enterT: 0,
   gap: 0,                        // seconds lost to interruptions, charged to no question
-  resumes: 0
+  resumes: 0,
+  px: pxFresh(),                 // proctoring record: exits, warning, full-screen exits, focus losses
+  hideAt: null,                  // second the page went hidden, while it is hidden
+  endBy: ''                      // 'manual' | 'clock' | 'proctor', set by finish()
 };
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
@@ -1432,7 +1471,7 @@ function saveProgress() {
       practice: !!S.practice, offline: !!S.offline, prior: S.prior || null,
       startedAt: S.startedAt, t0: S.t0, savedAt: now(), savedClk: clk(),
       cur: S.cur, ans: S.ans, marked: S.marked, seen: S.seen, ev: S.ev,
-      gap: S.gap, resumes: S.resumes
+      gap: S.gap, resumes: S.resumes, px: S.px, hideAt: S.hideAt
     }));
   } catch (e) { /* private window, or the quota is full — the paper carries on regardless */ }
 }
@@ -1508,17 +1547,22 @@ function resumeAttempt(p) {
   S.seen = Array.isArray(p.seen) && p.seen.length === N ? p.seen.slice() : Array(N).fill(false);
   S.ev = Array.isArray(p.ev) ? p.ev.slice() : [];
   S.resumes = (p.resumes || 0) + 1;
+  S.px = pxRestore(p.px); S.hideAt = null; S.endBy = '';
+  /* A snapshot taken while the student was away from the window records where the absence
+     began, and the break starts there rather than at the last save. */
+  const cut = (typeof p.hideAt === 'number' && p.hideAt >= 0 && p.hideAt < p.savedClk)
+    ? p.hideAt : p.savedClk;
 
   /* Close whichever question was open when the last snapshot was taken, then record the
      break itself. The question is charged only up to the snapshot; the break stands alone. */
   let open = null;
   for (const e of S.ev) { if (e.type === 'enter') open = e; else if (e.type === 'leave') open = null; }
-  if (open) S.ev.push({ t: Math.max(open.t, p.savedClk), type: 'leave', q: open.q });
+  if (open) S.ev.push({ t: Math.max(open.t, cut), type: 'leave', q: open.q });
   /* Clamped to the end of the paper: a break that outlasts the clock is only ever a
      break for the minutes the paper still had. Without this the band overruns the
      ribbon and the report claims more interruption than the paper was long. */
-  const away = Math.max(0, Math.min(clk(), CONFIG.DURATION) - p.savedClk);
-  if (away > 0) S.ev.push({ t: p.savedClk, type: 'gap', q: -1, v: away });
+  const away = Math.max(0, Math.min(clk(), CONFIG.DURATION) - cut);
+  if (away > 0) S.ev.push({ t: cut, type: 'gap', q: -1, v: away });
   S.gap = (p.gap || 0) + away;
 
   paintWelcome();
@@ -1929,7 +1973,7 @@ $('#begin').onclick = () => {
     return;
   }
   S.startedAt = now(); S.t0 = now(); S.ended = false;
-  S.gap = 0; S.resumes = 0;
+  S.gap = 0; S.resumes = 0; S.px = pxFresh(); S.hideAt = null; S.endBy = '';
   clearProgress();                  // a fresh sitting supersedes anything left on this machine
   runTest(null);
 };
@@ -1951,6 +1995,7 @@ function runTest(at) {
   window.addEventListener('beforeunload', beforeUnload);
   window.addEventListener('pagehide', saveProgress);      // catches the tab being closed
   document.addEventListener('visibilitychange', onHide);
+  pxArm();
   saveProgress();
 }
 /* Once the paper is live the player is the only thing on screen. Back is made inert by
@@ -1970,7 +2015,17 @@ function onPop() {
   log('navback', S.cur);
   try { history.pushState(null, '', location.href); } catch (e) {}
 }
-function onHide() { if (document.visibilityState === 'hidden') saveProgress(); }
+function onHide() {
+  if (document.visibilityState !== 'hidden') { pxBack(); return; }
+  if (PXMODE !== 'off' && !S.ended && !pxLeaving && S.hideAt === null) {
+    const at = clk();
+    S.hideAt = at;
+    /* Decided a moment later, not here. A reload or a closed tab fires pagehide before
+       this and is torn down before the timeout runs, so neither is counted as leaving. */
+    setTimeout(() => pxExit(at), 0);
+  }
+  saveProgress();
+}
 function beforeUnload(e) { if (!S.ended) { e.preventDefault(); e.returnValue = ''; } }
 
 /* ---------------- timer ---------------- */
@@ -1983,6 +2038,248 @@ function tick() {
   t.classList.toggle('crit', left <= 60);
   if (left <= 0) { t.textContent = '00:00'; S.autoSub = true; finish(); }
 }
+
+/* ==== PROCTOR CORE — lifted verbatim by test_proctor.mjs. Pure functions only. ==== */
+/* Two-strike window proctoring: the decisions, with nothing attached to the page. What
+   counts as leaving is the page being HIDDEN (another tab, another program covering the
+   browser, minimising). Losing focus and leaving full screen are counted and reported but
+   never strike, because on 300 lab machines both fire for innocent reasons. */
+function pxMode(v) {
+  /* Anything but the three words reads as 'log': a typo can disarm the rule, never arm it. */
+  return v === 'enforce' || v === 'log' || v === 'off' ? v : 'log';
+}
+function pxFresh() {
+  return { exits: 0, first: null, second: null, warn: 0, fs: 0, blur: 0, away: 0 };
+}
+/* A snapshot from an older build, a damaged one or none at all becomes a clean record. */
+function pxRestore(p) {
+  const f = pxFresh();
+  if (!p || typeof p !== 'object') return f;
+  const n = v => (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.floor(v) : 0;
+  const t = v => (typeof v === 'number' && isFinite(v) && v >= 0) ? v : null;
+  return { exits: n(p.exits), first: t(p.first), second: t(p.second), warn: p.warn ? 1 : 0,
+           fs: n(p.fs), blur: n(p.blur), away: n(p.away) };
+}
+/* One exit from the test window at second t of the paper. Returns the new record and what
+   the page has to do: 'none', 'warn' (first exit) or 'submit' (second and later). */
+function pxOnExit(px, mode, t) {
+  if (mode === 'off') return { px: px, act: 'none' };
+  const n = Object.assign({}, px, { exits: px.exits + 1 });
+  if (n.exits === 1) n.first = t;
+  if (n.exits === 2) n.second = t;
+  if (mode !== 'enforce') return { px: n, act: 'none' };
+  if (n.exits === 1) { n.warn = 1; return { px: n, act: 'warn' }; }
+  return { px: n, act: 'submit' };
+}
+/* The proctoring record rides to the Worker at the front of the ua field, which the Worker
+   stores verbatim in the same insert as the score. No Worker change, no new column. */
+function pxTag(s, resumes) {
+  if (!s) return '';
+  const v = x => (x === null || x === undefined) ? '' : x;
+  return 'px=' + s.mode + ';end=' + v(s.end) + ';x=' + s.exits + ';t1=' + v(s.first) +
+    ';t2=' + v(s.second) + ';fs=' + s.fs + ';bl=' + s.blur + ';aw=' + s.away +
+    ';rs=' + (resumes || 0) + ' | ';
+}
+function pxParse(ua) {
+  ua = String(ua || '');
+  if (ua.indexOf('px=') !== 0) return null;
+  const head = ua.split(' | ')[0], o = {};
+  head.split(';').forEach(kv => {
+    const i = kv.indexOf('=');
+    if (i < 0) return;
+    const k = kv.slice(0, i), v = kv.slice(i + 1);
+    o[k] = (k === 'px' || k === 'end') ? v : (v === '' ? null : Number(v));
+  });
+  return o;
+}
+/* The sentence on the student's own score screen. Numbers and fixed words only. */
+function pxLine(s, dur, mmss, human) {
+  if (!s || s.mode === 'off') return '';
+  const left = t => mmss(dur - t);
+  const fs = s.fs ? ' You left full screen ' + s.fs + (s.fs === 1 ? ' time.' : ' times.') : '';
+  if (s.end === 'proctor') {
+    return 'This paper was submitted automatically, with ' + left(s.second) +
+      ' left on the clock, because you left the test window a second time. You were warned ' +
+      'the first time, with ' + left(s.first) + ' left.' + fs;
+  }
+  if (!s.exits) return fs ? fs.slice(1) : '';
+  if (s.mode === 'enforce') {
+    return 'You left the test window once, with ' + left(s.first) + ' left on the clock, and ' +
+      'were warned. Time away: ' + human(s.away) + '.' + fs;
+  }
+  return 'You left the test window ' + s.exits + (s.exits === 1 ? ' time' : ' times') +
+    ' during the paper (' + human(s.away) + ' away in all). This has been recorded for your ' +
+    'faculty.' + fs;
+}
+/* ==== END PROCTOR CORE ==== */
+
+/* ==== PROCTOR GLUE — lifted by test_proctor.mjs and run against a stub page. ==== */
+const PXMODE = pxMode(CONFIG.PROCTOR);
+let pxLeaving = false, pxWake = null, pxFsArmed = false, pxBlurT = null;
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+function pxBlocking() { return !$('#pxwarn').hidden || !$('#pxfs').hidden; }
+
+/* Attached in runTest(), so a fresh start and a resume are armed the same way. */
+function pxArm() {
+  if (PXMODE === 'off') return;
+  pxLeaving = false;
+  pxFsArmed = !!fsEl();
+  document.addEventListener('fullscreenchange', pxFs);
+  document.addEventListener('webkitfullscreenchange', pxFs);
+  window.addEventListener('blur', pxBlur);
+  window.addEventListener('pagehide', pxPageHide);
+  window.addEventListener('pageshow', pxPageShow);
+  pxWakeOn();
+  if (PXMODE === 'enforce' && S.px.warn) pxWarnShow();   // reloaded before acknowledging
+}
+function pxDisarm() {
+  document.removeEventListener('fullscreenchange', pxFs);
+  document.removeEventListener('webkitfullscreenchange', pxFs);
+  window.removeEventListener('blur', pxBlur);
+  clearTimeout(pxBlurT);
+  $('#pxwarn').hidden = true; $('#pxfs').hidden = true;
+  if (pxWake) { try { pxWake.release(); } catch (e) {} pxWake = null; }
+}
+/* A reload or a closed tab fires pagehide BEFORE the page goes hidden. Neither is leaving
+   the window: a reload changes nothing, and closing the tab comes back as a resume, which
+   faculty see separately. */
+function pxPageHide() { pxLeaving = true; }
+function pxPageShow(e) { if (e && e.persisted) pxLeaving = false; }
+
+/* Keeps a lab machine from dimming, locking or starting its screensaver while a student
+   sits thinking. That is the commonest innocent way for a page to go hidden. The browser
+   drops the lock whenever the page is hidden, so it is taken again on every return. */
+async function pxWakeOn() {
+  if (pxWake || S.ended || !navigator.wakeLock) return;
+  try {
+    const w = await navigator.wakeLock.request('screen');
+    if (S.ended) { try { w.release(); } catch (e) {} return; }
+    pxWake = w;
+    w.addEventListener('release', () => { if (pxWake === w) pxWake = null; });
+  } catch (e) { pxWake = null; }
+}
+
+/* Called from onHide() one tick after the page went hidden, with the second it left. */
+function pxExit(at) {
+  if (S.ended || pxLeaving) return;
+  const r = pxOnExit(S.px, PXMODE, at);
+  S.px = r.px;
+  log('exit', S.cur, S.px.exits);
+  if (r.act === 'submit') {
+    /* Exactly what the clock does at 00:00. The absence runs to the end of the paper. */
+    S.endBy = 'proctor';
+    S.autoSub = true;
+    finish();
+    return;
+  }
+  saveProgress();
+  if (r.act === 'warn' && document.visibilityState === 'visible') pxWarnShow();
+}
+/* Back in the window: the time away becomes its own band, charged to no question. */
+function pxBack() {
+  if (PXMODE === 'off' || S.ended) return;
+  if (S.hideAt !== null) { pxClose(true); saveProgress(); }
+  pxWakeOn();
+  if (PXMODE === 'enforce' && S.px.warn) pxWarnShow();
+}
+function pxClose(reenter) {
+  const from = S.hideAt, to = clk();
+  S.hideAt = null;
+  if (from === null) return;
+  const away = Math.max(0, Math.min(to, CONFIG.DURATION) - from);
+  S.ev.push({ t: from, type: 'leave', q: S.cur });
+  if (away > 0) S.ev.push({ t: from, type: 'gap', q: -2, v: away });
+  S.px.away += away;          // not S.gap: that one counts closed-and-reopened breaks only
+  if (reenter) S.ev.push({ t: to, type: 'enter', q: S.cur });
+}
+
+function pxWarnShow() {
+  if (S.ended || PXMODE !== 'enforce') return;
+  $('#pxwmsg').innerHTML = 'You left the test window' + (S.px.first === null ? '' :
+    ' with <b>' + mmss(CONFIG.DURATION - S.px.first) + '</b> left on the clock') + '. ' +
+    '<b>This is your only warning.</b> If you leave it again &mdash; another tab, another ' +
+    'program, minimising the browser &mdash; your paper will be submitted immediately, as it ' +
+    'stands. The clock did not stop while you were away, and it is running now.';
+  $('#pxwarn').hidden = false;
+  try { $('#pxwgo').focus(); } catch (e) {}
+}
+$('#pxwgo').onclick = () => {
+  S.px.warn = 0;
+  $('#pxwarn').hidden = true;
+  saveProgress();
+  if (pxFsArmed && !fsEl()) pxFsReturn();    // this click is the gesture fullscreen needs
+};
+
+/* Leaving full screen hides the paper until the student goes back. Recorded, never a
+   strike: Esc is a reflex, and some browser prompts drop full screen on their own. */
+function pxFs() {
+  if (S.ended) return;
+  if (fsEl()) { pxFsArmed = true; $('#pxfs').hidden = true; return; }
+  if (!pxFsArmed) return;              // never engaged here, so there is nothing to leave
+  S.px.fs++;
+  log('fsexit', S.cur);
+  saveProgress();
+  if (PXMODE === 'enforce') $('#pxfs').hidden = false;
+}
+function pxFsReturn() {
+  const r = document.documentElement, go = r.requestFullscreen || r.webkitRequestFullscreen;
+  /* A browser that will not go back to full screen must not leave the student staring at a
+     cover: give up, lift it, and stop asking for the rest of the paper. */
+  const giveUp = () => {
+    if (fsEl() || S.ended) return;
+    pxFsArmed = false; $('#pxfs').hidden = true; log('fsrefused', S.cur);
+  };
+  if (!go) { giveUp(); return; }
+  try { const p = go.call(r); if (p && p.catch) p.catch(giveUp); } catch (e) { giveUp(); return; }
+  setTimeout(giveUp, 2000);
+}
+$('#pxfsgo').onclick = pxFsReturn;
+
+/* Focus lost without the page going hidden: a second window beside this one, or a click on
+   another monitor. Counted after a short pause so a notification that takes focus and hands
+   it straight back is not, and a tab switch (which also blurs) is counted once, as an exit. */
+function pxBlur() {
+  if (S.ended) return;
+  clearTimeout(pxBlurT);
+  pxBlurT = setTimeout(() => {
+    if (S.ended || document.visibilityState !== 'visible' || document.hasFocus()) return;
+    S.px.blur++;
+    log('blur', S.cur);
+  }, 400);
+}
+
+/* Attached to the attempt at submission: into the report, and onto the wire via ua. */
+function pxSnap(resumes) {
+  if (PXMODE === 'off') return null;
+  const s = Object.assign({ mode: PXMODE, end: S.endBy || '' }, S.px);
+  delete s.warn;
+  s.tag = pxTag(s, resumes);
+  return s;
+}
+function pxPaintLine(A) {
+  const box = $('#r-px');
+  if (!box) return;
+  const line = pxLine(A && A.px, CONFIG.DURATION, mmss, human);
+  box.innerHTML = line ? '<div class="banner' + (A.px.end === 'proctor' ? ' err' : '') + '">' +
+    line + '</div>' : '';
+  box.hidden = !line;
+}
+
+/* The rule goes on the instructions page, worded for the mode this paper was built in. */
+(function pxRule() {
+  const row = $('#pxrule');
+  if (!row || PXMODE === 'off') return;
+  $('#pxruletext').innerHTML = PXMODE === 'enforce'
+    ? 'Do not leave the test window once the paper begins &mdash; no other tab, no other ' +
+      'program, no minimising. <b>The first time you leave, you get one warning. The second ' +
+      'time, your paper is submitted immediately, as it stands.</b> The clock never stops. ' +
+      'Leaving full screen hides the paper until you return to full screen; that is recorded, ' +
+      'but it does not count as leaving.'
+    : 'Once the paper begins, every time you leave the test window or full screen is recorded ' +
+      'and reported to your faculty.';
+  row.hidden = false;
+})();
+/* ==== END PROCTOR GLUE ==== */
 
 
 /* ---------------- per-student randomisation ----------------
@@ -2314,6 +2611,7 @@ $('#submitbtn').onclick = () => {
 };
 document.addEventListener('keydown', e => {
   if (!$('#test').classList.contains('on')) return;
+  if (pxBlocking()) return;          // the paper is covered: a key must not answer it blind
   /* Calculator open: the exam's is mouse-only, so the keyboard does nothing at all.
      Without this, a student typing 5 into the calculator would silently answer the
      question with option 5 — worse than nothing happening. */
@@ -2583,7 +2881,7 @@ function timeline() {
   for (const e of S.ev) {
     if (e.type === 'enter') { open = { q: e.q, from: e.t }; }
     else if (e.type === 'leave' && open) { segs.push({ q: open.q, from: open.from, to: e.t }); open = null; }
-    else if (e.type === 'gap') { segs.push({ q: -1, from: e.t, to: e.t + e.v }); }   // interruption
+    else if (e.type === 'gap') { segs.push({ q: e.q === -2 ? -2 : -1, from: e.t, to: e.t + e.v }); }   // interruption (-2: away from the window)
   }
   if (open) segs.push({ q: open.q, from: open.from, to: S.endT });
   return segs.filter(s => s.to > s.from).sort((a, b) => a.from - b.from);
@@ -2599,6 +2897,9 @@ async function finish() {
   window.removeEventListener('beforeunload', beforeUnload);
   window.removeEventListener('pagehide', saveProgress);
   document.removeEventListener('visibilitychange', onHide);
+  if (S.hideAt !== null) pxClose(false);   // ended while away: the absence runs to the end
+  pxDisarm();
+  if (!S.endBy) S.endBy = S.autoSub ? 'clock' : 'manual';
   if (CALC.open) calcShow(false);   // don't leave it floating over the report
   log('leave', S.cur);
   S.endT = clk();
@@ -2609,6 +2910,7 @@ async function finish() {
      colours, the ribbon, the triage, the score itself — hangs off verdicts that only the
      Worker can produce, because only the Worker has the key. */
   const pre = analyse(null, segs);          // telemetry only; correctness is not read
+  pre.px = pxSnap(pre.resumes);
   showSending();
   const j = await sendAnswers(pre, segs);
 
@@ -2621,6 +2923,7 @@ async function finish() {
   }
 
   const A = analyse(j.g, segs);
+  A.px = pre.px;
   try {
     localStorage.setItem(LSKEY, JSON.stringify(
       { pin: S.pin, startedAt: S.startedAt, score: A.score }));
@@ -2987,8 +3290,10 @@ function render(A) {
     d.toLocaleDateString('en-IN',
     { day: 'numeric', month: 'long', year: 'numeric' }) + '  ·  ' +
     d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) +
-    (A.auto ? '  ·  submitted by the clock' : '  ·  submitted early') +
+    (A.px && A.px.end === 'proctor' ? '  ·  submitted on leaving the test window'
+      : A.auto ? '  ·  submitted by the clock' : '  ·  submitted early') +
     (A.resumes ? '  ·  interrupted and resumed, ' + human(A.gap) + ' off the clock' : '');
+  pxPaintLine(A);
 
   /* score row */
   const sr = $('#scorerow'); sr.innerHTML = '';
@@ -2997,7 +3302,7 @@ function render(A) {
    ['Attempted', A.attempted, 'of ' + N + ' questions', ''],
    ['Correct', A.correct, acc + '% of what you attempted', ''],
    ['Negative', '−' + A.wrongMCQ, A.wrongTITA ? A.wrongTITA + ' wrong TITA cost nothing' : 'from wrong MCQs', ''],
-   ['Time used', mmss(A.used), A.auto ? 'full paper' : mmss(CONFIG.DURATION - A.used) + ' left on the clock', '']
+   ['Time used', mmss(A.used), A.auto && !(A.px && A.px.end === 'proctor') ? 'full paper' : mmss(CONFIG.DURATION - A.used) + ' left on the clock', '']
   ].forEach(([lab, val, sub]) => {
     const c = el('div', 'sc');
     const b = el('b'); b.textContent = val; c.appendChild(b);
@@ -3015,10 +3320,12 @@ function render(A) {
     if (s.q < 0) {                                   // the paper was closed and reopened here
       const gp = el('div', 'rseg gapseg');
       gp.style.flex = dur + ' 0 0';
-      if (dur / total > .06) gp.appendChild(el('span', '', 'interrupted · ' + human(dur)));
+      if (dur / total > .06) gp.appendChild(el('span', '', (s.q === -2 ? 'away · ' : 'interrupted · ') + human(dur)));
       gp.onmousemove = ev => { const t = $('#ribtip');
-        t.innerHTML = '<b>Interrupted</b><br><span class="t">' + human(dur) + '</span><br>' +
-          'The paper was closed and reopened. The clock kept running, but this time is ' +
+        t.innerHTML = (s.q === -2 ? '<b>Away from the test window</b>' : '<b>Interrupted</b>') +
+          '<br><span class="t">' + human(dur) + '</span><br>' +
+          (s.q === -2 ? 'Another tab or program was in front of the paper. ' :
+          'The paper was closed and reopened. ') + 'The clock kept running, but this time is ' +
           'charged to no question.';
         t.style.display = 'block';
         t.style.left = Math.min(ev.clientX + 14, innerWidth - 268) + 'px';
@@ -3470,7 +3777,7 @@ function payload(A) {
       co: p.calcOpens, ck: p.calcKeys, cs: p.calcSecs, ct: p.calcTyped })),
     calcOpens: A.per.reduce((s, p) => s + p.calcOpens, 0),
     calcSecs: A.per.reduce((s, p) => s + p.calcSecs, 0),
-    ua: navigator.userAgent.slice(0, 120), v: 2
+    ua: ((A.px && A.px.tag) || '') + navigator.userAgent.slice(0, 120), v: 2
   };
 }
 
