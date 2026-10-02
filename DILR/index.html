@@ -2077,6 +2077,7 @@ async function doReview(pin) {
     show('res');
     applyRank();                      // rank has moved since they sat it
     renderTriage(j.triage);           // present only once faculty has published it
+    loadPeer();                       // batch medians: never part of the stored report
     const rt = $('#retry'); if (rt) rt.style.display = 'none';
     const b = $('#r-banner');
     if (b) b.innerHTML = '<div class="banner">This is the report from the attempt you have ' +
@@ -4292,6 +4293,17 @@ async function applyRank() {
     '</div>';
 }
 
+/* Review never passes through afterSend, so until this existed every reopened report showed
+   blank Peer and Solved-in columns and a dash for Batch median. Fetched on its own; a
+   failure costs only those columns. */
+async function loadPeer() {
+  if (!CONFIG.ENDPOINT) return;
+  try {
+    const r = await fetch(api('action=peer&paper=' + encodeURIComponent(CONFIG.PAPER_ID)));
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.peer) && j.n >= CONFIG.PEER_MIN) applyPeer(j, RPT);
+  } catch (e) { /* the report stands without the batch columns */ }
+}
 function applyPeer(j, A) {
   /* Kept for the panel as well as the table: it draws the batch median and the solved-in
      time, and it may be opened long after this call has painted the table cells. */
